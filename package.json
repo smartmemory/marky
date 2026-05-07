@@ -1,0 +1,41 @@
+{
+  "name": "marky",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@milkdown/core": "^7.5.8",
+    "@milkdown/ctx": "^7.5.8",
+    "@milkdown/plugin-clipboard": "^7.5.8",
+    "@milkdown/plugin-history": "^7.5.8",
+    "@milkdown/plugin-listener": "^7.5.8",
+    "@milkdown/preset-commonmark": "^7.5.8",
+    "@milkdown/preset-gfm": "^7.5.8",
+    "@milkdown/prose": "^7.5.8",
+    "@milkdown/react": "^7.5.8",
+    "@milkdown/theme-nord": "^7.5.8",
+    "@milkdown/transformer": "^7.5.8",
+    "@milkdown/utils": "^7.5.8",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-fs": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-window-state": "^2.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}
