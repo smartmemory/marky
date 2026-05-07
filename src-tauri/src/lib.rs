@@ -1,5 +1,7 @@
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, RunEvent, State};
+use tauri::{Emitter, Manager, State};
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
 
 #[derive(Default)]
 struct PendingFile(Mutex<Option<String>>);
@@ -122,14 +124,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app, event| {
-        if let RunEvent::Opened { urls } = event {
+    app.run(|_app, _event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = _event {
             if let Some(url) = urls.first() {
                 if let Some(path) =
                     url.to_file_path().ok().and_then(|p| p.to_str().map(String::from))
                 {
-                    focus_main(app);
-                    deliver(app, path);
+                    focus_main(_app);
+                    deliver(_app, path);
                 }
             }
         }
