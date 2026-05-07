@@ -5,7 +5,7 @@ import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tau
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { exists, readTextFile, watchImmediate, writeTextFile } from "@tauri-apps/plugin-fs";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { callCommand } from "@milkdown/utils";
 import {
   toggleStrongCommand,
@@ -227,6 +227,26 @@ function App() {
         kind: "error",
       });
     }
+  }, []);
+
+  const handleReportBug = useCallback(async () => {
+    const ua = navigator.userAgent;
+    const body = encodeURIComponent(
+      `**Marky version:** 0.1.0\n**OS / build:** ${ua}\n\n**What happened?**\n\n\n**Steps to reproduce:**\n1. \n2. \n3. \n`,
+    );
+    await openUrl(
+      `https://github.com/smartmemory/marky/issues/new?template=bug.yml&body=${body}`,
+    );
+  }, []);
+
+  const handleSuggestFeature = useCallback(async () => {
+    await openUrl(
+      "https://github.com/smartmemory/marky/discussions/new?category=ideas",
+    );
+  }, []);
+
+  const handleViewRepo = useCallback(async () => {
+    await openUrl("https://github.com/smartmemory/marky");
   }, []);
 
   const handleShowInFinder = useCallback(async () => {
@@ -550,6 +570,28 @@ function App() {
         ],
       });
 
+      const helpMenu = await Submenu.new({
+        text: "Help",
+        items: [
+          await MenuItem.new({
+            id: "help-report-bug",
+            text: "Report a Bug…",
+            action: () => handleReportBug(),
+          }),
+          await MenuItem.new({
+            id: "help-suggest-feature",
+            text: "Suggest a Feature…",
+            action: () => handleSuggestFeature(),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "help-view-repo",
+            text: "View on GitHub",
+            action: () => handleViewRepo(),
+          }),
+        ],
+      });
+
       const windowMenu = await Submenu.new({
         text: "Window",
         items: [
@@ -585,7 +627,7 @@ function App() {
       });
 
       const menu = await Menu.new({
-        items: [appMenu, fileMenu, editMenu, formatMenu, viewMenu, windowMenu],
+        items: [appMenu, fileMenu, editMenu, formatMenu, viewMenu, windowMenu, helpMenu],
       });
 
       if (cancelled) return;
@@ -605,6 +647,9 @@ function App() {
     handleClose,
     handleShowInFinder,
     handleSetAsDefault,
+    handleReportBug,
+    handleSuggestFeature,
+    handleViewRepo,
     handleOpenRecent,
     clearRecents,
     fmtBold,

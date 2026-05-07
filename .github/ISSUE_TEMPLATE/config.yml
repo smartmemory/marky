@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature request / idea
+    url: https://github.com/smartmemory/marky/discussions/new?category=ideas
+    about: Suggest a new feature or share an idea — these go in Discussions, not Issues.
+  - name: Question / help
+    url: https://github.com/smartmemory/marky/discussions/new?category=q-a
+    about: Ask a question about using Marky.
