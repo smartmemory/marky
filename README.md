@@ -3,9 +3,12 @@
 [![Release](https://img.shields.io/github/v/release/smartmemory/marky?include_prereleases&sort=semver)](https://github.com/smartmemory/marky/releases)
 [![License](https://img.shields.io/github/license/smartmemory/marky)](LICENSE)
 
-A fast, lightweight, cross-platform markdown editor. Tauri 2 + Milkdown + React.
+**A simple, fast markdown viewer and editor that just works.**
 
-**Pitch**: Typora-style WYSIWYG editing in a 10MB binary, $5 instead of $15.
+Open any `.md` file, read it the way it's meant to be read, edit it the way you'd
+edit a doc. No mode switches, no sidebars in the way, no syntax noise. Just text.
+
+Cross-platform (macOS, Windows, Linux), open source, ~10 MB.
 
 ## Install
 
@@ -16,17 +19,27 @@ Download the latest release for your platform:
 - **Windows**: `.msi` — SmartScreen warning expected until we sign.
 - **Linux**: `.deb` / `.AppImage`.
 
+Then double-click any `.md` file, or run `marky path/to/file.md` after installing
+the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
+
+## What works today
+
+- Double-click a `.md` file → it opens in Marky
+- WYSIWYG editing (CommonMark + GFM): bold, italic, headings, lists, quotes, code, links, tables
+- File menu: New, Open, Save, Save As, Revert, Recent Files, Show in Finder
+- Keyboard shortcuts (⌘N / ⌘O / ⌘S / ⌘⇧S, ⌘B / ⌘I / ⌘K, ⌘1–6 for headings, …)
+- Dirty-state tracking — warns before closing or discarding
+- File watcher — prompts to reload if the file changes on disk
+- Drag a `.md` file onto the window to open it
+- Light / Dark / System theme
+- Help menu: Report a Bug, Suggest a Feature, View on GitHub
+
 ## Stack
 
 - **Shell**: Tauri 2 (Rust + native webviews)
 - **Editor**: Milkdown 7 (ProseMirror-based, true WYSIWYG)
 - **Frontend**: React 19 + TypeScript + Vite
 - **Targets**: macOS, Windows, Linux
-
-## Status
-
-v0 skeleton. Open and save `.md` files; full WYSIWYG editing via Milkdown
-(CommonMark + GFM, history, clipboard).
 
 ## Run
 
@@ -50,17 +63,19 @@ Outputs:
 
 ## Roadmap
 
-### v0 (skeleton — done)
+### v0.1 (shipped)
 - [x] Tauri 2 shell, React + TS frontend
 - [x] Milkdown editor with CommonMark + GFM
-- [x] Open / save `.md` files via Tauri dialog + fs plugins
-- [x] Basic dark-mode toolbar
+- [x] Open / save `.md` files via native dialogs
+- [x] Keyboard shortcuts (⌘N/O/S/⇧S, ⌘B/I/K, ⌘1–6, …)
+- [x] Recent files menu
+- [x] Dirty-state warning on close / discard
+- [x] File watcher — reload prompt on external edits
+- [x] Drag-and-drop to open
+- [x] Light / dark / system theme
+- [x] Help menu — bug report and feature suggestion
 
-### v0.1 (MVP polish)
-- [ ] Keyboard shortcuts (⌘O, ⌘S, ⌘N)
-- [ ] Recent files
-- [ ] Dirty-state warning on close
-- [ ] File watcher (live external edits)
+### v0.2 (next)
 - [ ] Better typography defaults (iA Writer-quality)
 - [ ] Image paste → `assets/` folder + relative path rewrite
 
