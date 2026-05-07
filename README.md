@@ -1,8 +1,20 @@
 # Marky
 
+[![Release](https://img.shields.io/github/v/release/smartmemory/marky?include_prereleases&sort=semver)](https://github.com/smartmemory/marky/releases)
+[![License](https://img.shields.io/github/license/smartmemory/marky)](LICENSE)
+
 A fast, lightweight, cross-platform markdown editor. Tauri 2 + Milkdown + React.
 
 **Pitch**: Typora-style WYSIWYG editing in a 10MB binary, $5 instead of $15.
+
+## Install
+
+Download the latest release for your platform:
+[**Releases →**](https://github.com/smartmemory/marky/releases/latest)
+
+- **macOS** (Apple Silicon / Intel): `.dmg` — right-click → Open the first time (unsigned).
+- **Windows**: `.msi` — SmartScreen warning expected until we sign.
+- **Linux**: `.deb` / `.AppImage`.
 
 ## Stack
 
