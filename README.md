@@ -86,13 +86,6 @@ Outputs:
 - [ ] Slash-command menu
 - [ ] Math (KaTeX), Mermaid, syntax highlighting (Shiki)
 
-### v1 (paid)
-- [ ] Auto-update (Tauri updater + GitHub Releases)
-- [ ] Code signing: macOS notarization, Windows EV cert
-- [ ] Distribution: direct download, MAS, Microsoft Store, Flathub
-- [ ] AI inline commands (BYOK Claude/OpenAI)
-- [ ] Optional sync (folder + git, no server)
-
 ## Notes
 
 - The `fs:scope` capability is currently `**` for dev convenience. Tighten
