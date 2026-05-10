@@ -141,3 +141,73 @@ html, body, #root {
   background: color-mix(in srgb, var(--fg) 5%, transparent) !important;
   background-color: color-mix(in srgb, var(--fg) 5%, transparent) !important;
 }
+
+.marky-mermaid-block {
+  margin: 1em 0;
+  position: relative;
+}
+
+.marky-mermaid-block .marky-mermaid-source {
+  margin: 0 0 0.5em 0;
+  display: none;
+}
+
+.marky-mermaid-block.is-editing .marky-mermaid-source,
+.marky-mermaid-block:has(.marky-mermaid-error) .marky-mermaid-source {
+  display: block;
+}
+
+.marky-mermaid-toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.marky-mermaid-block:hover .marky-mermaid-toolbar,
+.marky-mermaid-block.is-editing .marky-mermaid-toolbar {
+  opacity: 1;
+}
+
+.marky-mermaid-edit {
+  background: var(--code-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.marky-mermaid-block.is-editing .marky-mermaid-edit {
+  background: var(--accent, #4a90e2);
+  color: #fff;
+}
+
+.marky-mermaid-preview {
+  display: flex;
+  justify-content: center;
+  padding: 0.75em;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.marky-mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.marky-mermaid-error {
+  color: #d33;
+  background: transparent;
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.85em;
+}

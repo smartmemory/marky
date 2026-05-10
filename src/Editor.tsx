@@ -9,6 +9,7 @@ import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { useEffect, useRef } from "react";
 
 import "@milkdown/theme-nord/style.css";
+import { mermaidPlugin } from "./mermaidPlugin";
 
 export type EditorGetter = () => Editor | undefined;
 
@@ -36,7 +37,8 @@ function MilkdownEditor({ initial, onChange, onReady }: Props) {
       .use(gfm)
       .use(history)
       .use(clipboard)
-      .use(listener),
+      .use(listener)
+      .use(mermaidPlugin),
   );
 
   useEffect(() => {
