@@ -32,6 +32,7 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - File watcher — prompts to reload if the file changes on disk
 - Drag a `.md` file onto the window to open it
 - Light / Dark / System theme
+- Zoom in/out (⌘+ / ⌘− / ⌘0 to reset) — persists across sessions
 - Help menu: Report a Bug, Suggest a Feature, View on GitHub
 
 ## Stack

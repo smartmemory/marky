@@ -26,13 +26,27 @@ import "./App.css";
 const RECENTS_KEY = "marky.recents";
 const LAST_FILE_KEY = "marky.lastFile";
 const THEME_KEY = "marky.theme";
+const ZOOM_KEY = "marky.zoom";
 const RECENTS_MAX = 10;
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.1;
 
 type Theme = "system" | "light" | "dark";
 
 function loadTheme(): Theme {
   const v = localStorage.getItem(THEME_KEY);
   return v === "light" || v === "dark" || v === "system" ? v : "system";
+}
+
+function loadZoom(): number {
+  const v = Number(localStorage.getItem(ZOOM_KEY));
+  return Number.isFinite(v) && v >= ZOOM_MIN && v <= ZOOM_MAX ? v : 1;
+}
+
+function clampZoom(z: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
 }
 
 function applyTheme(theme: Theme) {
@@ -69,11 +83,21 @@ function App() {
   const [editorKey, setEditorKey] = useState(0);
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [zoom, setZoom] = useState<number>(loadZoom);
 
   useEffect(() => {
     applyTheme(theme);
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--marky-zoom", String(zoom));
+    localStorage.setItem(ZOOM_KEY, String(zoom));
+  }, [zoom]);
+
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + ZOOM_STEP)), []);
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - ZOOM_STEP)), []);
+  const zoomReset = useCallback(() => setZoom(1), []);
 
   // Stash latest values in refs so the menu's static action callbacks see fresh state.
   const stateRef = useRef({ content, path, dirty, recents });
@@ -566,6 +590,25 @@ function App() {
         items: [
           themeSubmenu,
           await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "zoom-in",
+            text: "Zoom In",
+            accelerator: "CmdOrCtrl+Equal",
+            action: () => zoomIn(),
+          }),
+          await MenuItem.new({
+            id: "zoom-out",
+            text: "Zoom Out",
+            accelerator: "CmdOrCtrl+Minus",
+            action: () => zoomOut(),
+          }),
+          await MenuItem.new({
+            id: "zoom-reset",
+            text: "Actual Size",
+            accelerator: "CmdOrCtrl+0",
+            action: () => zoomReset(),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
           await PredefinedMenuItem.new({ item: "Fullscreen" }),
         ],
       });
@@ -639,6 +682,9 @@ function App() {
   }, [
     recents,
     theme,
+    zoomIn,
+    zoomOut,
+    zoomReset,
     handleNew,
     handleOpen,
     handleSave,

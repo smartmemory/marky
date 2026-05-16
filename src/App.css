@@ -86,6 +86,10 @@ html, body, #root {
   color: var(--fg);
 }
 
+.milkdown .ProseMirror {
+  font-size: calc(16px * var(--marky-zoom, 1));
+}
+
 .milkdown pre {
   background: var(--code-bg) !important;
   color: var(--code-fg) !important;
