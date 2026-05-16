@@ -33,6 +33,7 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - Drag a `.md` file onto the window to open it
 - Light / Dark / System theme
 - Zoom in/out (⌘+ / ⌘− / ⌘0 to reset) — persists across sessions
+- Auto-update — checks GitHub Releases on launch (and via Marky → Check for Updates…), installs signed updates with one click
 - Help menu: Report a Bug, Suggest a Feature, View on GitHub
 
 ## Stack

@@ -6,6 +6,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { exists, readTextFile, watchImmediate, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { callCommand } from "@milkdown/utils";
 import {
   toggleStrongCommand,
@@ -98,6 +100,49 @@ function App() {
   const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + ZOOM_STEP)), []);
   const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - ZOOM_STEP)), []);
   const zoomReset = useCallback(() => setZoom(1), []);
+
+  const checkForUpdates = useCallback(async (manual: boolean) => {
+    try {
+      const update = await check();
+      if (!update) {
+        if (manual) {
+          await message("You're running the latest version of Marky.", {
+            title: "No Updates Available",
+          });
+        }
+        return;
+      }
+      const ok = await ask(
+        `Marky ${update.version} is available — you have ${update.currentVersion}.\n\nDownload and install it now? Marky will restart to finish.`,
+        {
+          title: "Update Available",
+          kind: "info",
+          okLabel: "Install & Restart",
+          cancelLabel: "Later",
+        },
+      );
+      if (!ok) return;
+      await update.downloadAndInstall();
+      await relaunch();
+    } catch (e) {
+      if (manual) {
+        await message(`Could not check for updates: ${e}`, {
+          title: "Update Error",
+          kind: "error",
+        });
+      } else {
+        console.error("Update check failed:", e);
+      }
+    }
+  }, []);
+
+  // Silent update check shortly after launch.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      checkForUpdates(false);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [checkForUpdates]);
 
   // Stash latest values in refs so the menu's static action callbacks see fresh state.
   const stateRef = useRef({ content, path, dirty, recents });
@@ -654,6 +699,12 @@ function App() {
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
+            id: "check-updates",
+            text: "Check for Updates…",
+            action: () => checkForUpdates(true),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
             id: "set-default",
             text: "Set as Default for Markdown Files",
             action: () => handleSetAsDefault(),
@@ -685,6 +736,7 @@ function App() {
     zoomIn,
     zoomOut,
     zoomReset,
+    checkForUpdates,
     handleNew,
     handleOpen,
     handleSave,
