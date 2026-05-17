@@ -8,6 +8,8 @@
     "core:menu:default",
     "core:window:default",
     "core:window:allow-set-title",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:webview:default",
     "core:event:default",
     "opener:default",
