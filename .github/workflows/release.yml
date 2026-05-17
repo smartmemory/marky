@@ -55,12 +55,28 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tauri updater signing (already configured)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple code signing + notarization (macOS only).
+          # If these secrets are unset the build still succeeds, just unsigned.
+          # Required secrets:
+          #   APPLE_CERTIFICATE          base64 of the Developer ID Application .p12
+          #   APPLE_CERTIFICATE_PASSWORD password for that .p12
+          #   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Name (TEAMID)"
+          #   APPLE_ID                   Apple Developer account email
+          #   APPLE_PASSWORD             app-specific password for that Apple ID
+          #   APPLE_TEAM_ID              10-char Apple Developer Team ID
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Marky ${{ github.ref_name }}'
-          releaseBody: 'Unsigned binaries — see README for install notes. macOS: right-click → Open the first time. Windows: SmartScreen warning is expected until we sign.'
+          releaseBody: 'macOS: if you see an "is damaged" error, run `xattr -dr com.apple.quarantine /Applications/Marky.app` (builds are not yet notarized). Windows: SmartScreen warning is expected until we sign. See README for details.'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

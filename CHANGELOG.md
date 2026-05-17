@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Release workflow now supports Apple code signing + notarization when `APPLE_*`
+  secrets are configured (falls back to unsigned builds otherwise).
+- README documents the correct `xattr -dr com.apple.quarantine` workaround for
+  unsigned macOS builds (the old "right-click → Open" advice no longer works).
+
 ## v0.1.4
 
 ### Fixed

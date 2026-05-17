@@ -15,7 +15,17 @@ Cross-platform (macOS, Windows, Linux), open source, ~10 MB.
 Download the latest release for your platform:
 [**Releases →**](https://github.com/smartmemory/marky/releases/latest)
 
-- **macOS** (Apple Silicon / Intel): `.dmg` — right-click → Open the first time (unsigned).
+- **macOS** (Apple Silicon / Intel): `.dmg`. Builds are not yet notarized, so
+  after dragging Marky to Applications, clear the download quarantine flag once:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Marky.app
+  ```
+
+  Then open Marky normally. (Right-click → Open does **not** bypass this on
+  current macOS — you'll see a misleading "is damaged" error until you run the
+  command above. The app is fine; it's just unsigned.) Once installed, future
+  versions auto-update without this step.
 - **Windows**: `.msi` — SmartScreen warning expected until we sign.
 - **Linux**: `.deb` / `.AppImage`.
 
