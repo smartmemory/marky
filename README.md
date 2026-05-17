@@ -19,8 +19,11 @@ Download the latest release for your platform:
   after dragging Marky to Applications, clear the download quarantine flag once:
 
   ```bash
-  xattr -dr com.apple.quarantine /Applications/Marky.app
+  /usr/bin/xattr -dr com.apple.quarantine /Applications/Marky.app
   ```
+
+  (Use the full `/usr/bin/xattr` path — a Homebrew/Python `xattr` earlier in
+  your `PATH` may not support the `-r` flag.)
 
   Then open Marky normally. (Right-click → Open does **not** bypass this on
   current macOS — you'll see a misleading "is damaged" error until you run the
