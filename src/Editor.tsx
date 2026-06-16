@@ -1,4 +1,4 @@
-import { Editor, rootCtx, defaultValueCtx } from "@milkdown/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from "@milkdown/core";
 import { commonmark } from "@milkdown/preset-commonmark";
 import { gfm } from "@milkdown/preset-gfm";
 import { history } from "@milkdown/plugin-history";
@@ -23,7 +23,7 @@ function MilkdownEditor({ initial, onChange, onReady }: Props) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const { get } = useEditor((root) =>
+  const { get, loading } = useEditor((root) =>
     Editor.make()
       .config(nord)
       .config((ctx) => {
@@ -41,9 +41,18 @@ function MilkdownEditor({ initial, onChange, onReady }: Props) {
       .use(mermaidPlugin),
   );
 
+  // Once the editor finishes creating, expose it and place the cursor inside it.
+  // Without this an empty document mounts unfocused, so a new blank file looks
+  // uneditable until you find its single editable line.
   useEffect(() => {
+    if (loading) return;
+    const ed = get();
+    if (!ed) return;
     onReady?.(get);
-  }, [get, onReady]);
+    ed.action((ctx) => {
+      ctx.get(editorViewCtx).focus();
+    });
+  }, [loading, get, onReady]);
 
   return <Milkdown />;
 }

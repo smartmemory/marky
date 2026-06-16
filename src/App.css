@@ -88,6 +88,9 @@ html, body, #root {
 
 .milkdown .ProseMirror {
   font-size: calc(16px * var(--marky-zoom, 1));
+  /* Fill the visible area so clicking anywhere on a blank page focuses the
+     editor and places the cursor — otherwise an empty doc is a one-line target. */
+  min-height: calc(100vh - 120px);
 }
 
 .milkdown pre {
