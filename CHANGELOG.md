@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.5
 
 ### Added
 - Find / Replace (Cmd+F to find, Cmd+Alt+F to replace). Highlights all matches

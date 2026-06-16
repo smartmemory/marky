@@ -419,7 +419,7 @@ function App() {
   const handleReportBug = useCallback(async () => {
     const ua = navigator.userAgent;
     const body = encodeURIComponent(
-      `**Marky version:** 0.1.0\n**OS / build:** ${ua}\n\n**What happened?**\n\n\n**Steps to reproduce:**\n1. \n2. \n3. \n`,
+      `**Marky version:** 0.1.5\n**OS / build:** ${ua}\n\n**What happened?**\n\n\n**Steps to reproduce:**\n1. \n2. \n3. \n`,
     );
     await openUrl(
       `https://github.com/smartmemory/marky/issues/new?template=bug.yml&body=${body}`,
@@ -826,7 +826,7 @@ function App() {
         text: "Marky",
         items: [
           await PredefinedMenuItem.new({
-            item: { About: { name: "Marky", version: "0.1.0" } },
+            item: { About: { name: "Marky", version: "0.1.5" } },
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
