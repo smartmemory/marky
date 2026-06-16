@@ -10,6 +10,7 @@ import { useEffect, useRef } from "react";
 
 import "@milkdown/theme-nord/style.css";
 import { mermaidPlugin } from "./mermaidPlugin";
+import { searchPlugin } from "./searchPlugin";
 
 export type EditorGetter = () => Editor | undefined;
 
@@ -38,7 +39,8 @@ function MilkdownEditor({ initial, onChange, onReady }: Props) {
       .use(history)
       .use(clipboard)
       .use(listener)
-      .use(mermaidPlugin),
+      .use(mermaidPlugin)
+      .use(searchPlugin),
   );
 
   // Once the editor finishes creating, expose it and place the cursor inside it.

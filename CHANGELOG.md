@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+- Find / Replace (Cmd+F to find, Cmd+Alt+F to replace). Highlights all matches
+  with a match counter, Enter / Shift+Enter to step through results, a
+  match-case toggle, and Replace / Replace All. Esc closes the bar.
+
 ### Fixed
 - New / blank documents were not editable: the editor mounted without focus and
   the editable area collapsed to a single line, so there was no cursor and

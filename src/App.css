@@ -71,6 +71,98 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  position: relative;
+}
+
+/* Find / Replace bar */
+.marky-find {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.marky-find-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.marky-find-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+}
+
+.marky-find-input:focus {
+  border-color: var(--accent);
+}
+
+.marky-find-count {
+  min-width: 56px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.marky-find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.marky-find-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.marky-find-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.marky-find-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.marky-find-text {
+  padding: 0 10px;
+}
+
+/* Search match highlighting */
+.milkdown .ProseMirror .marky-search-match {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 2px;
+}
+
+.milkdown .ProseMirror .marky-search-current {
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .editor-wrap {

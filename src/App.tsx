@@ -21,8 +21,19 @@ import {
   insertHrCommand,
   toggleLinkCommand,
 } from "@milkdown/preset-commonmark";
-import type { Editor } from "@milkdown/core";
+import { editorViewCtx, type Editor } from "@milkdown/core";
+import type { EditorView } from "@milkdown/prose/view";
 import { MarkyEditor, type EditorGetter } from "./Editor";
+import { FindReplace } from "./FindReplace";
+import {
+  clearSearch,
+  getSearchState,
+  nextMatch,
+  prevMatch,
+  replaceAll,
+  replaceCurrent,
+  setSearch,
+} from "./searchPlugin";
 import "./App.css";
 
 const RECENTS_KEY = "marky.recents";
@@ -86,6 +97,14 @@ function App() {
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [zoom, setZoom] = useState<number>(loadZoom);
+
+  // Find / Replace bar
+  const [findOpen, setFindOpen] = useState(false);
+  const [findMode, setFindMode] = useState<"find" | "replace">("find");
+  const [findQuery, setFindQuery] = useState("");
+  const [findReplacement, setFindReplacement] = useState("");
+  const [findCaseSensitive, setFindCaseSensitive] = useState(false);
+  const [matchInfo, setMatchInfo] = useState({ current: -1, total: 0 });
 
   useEffect(() => {
     applyTheme(theme);
@@ -159,6 +178,105 @@ function App() {
     if (!ed) return;
     ed.action(callCommand(command.key, payload));
   }, []);
+
+  // Run a function against the live ProseMirror view (for find/replace).
+  const withView = useCallback((fn: (view: EditorView) => void) => {
+    const ed = getEditorRef.current?.() as Editor | undefined;
+    if (!ed) return;
+    ed.action((ctx) => fn(ctx.get(editorViewCtx)));
+  }, []);
+
+  const refreshMatchInfo = useCallback((view: EditorView) => {
+    const s = getSearchState(view);
+    setMatchInfo({ current: s.current, total: s.matches.length });
+  }, []);
+
+  const runSearch = useCallback(
+    (query: string, caseSensitive: boolean) => {
+      withView((view) => {
+        setSearch(view, query, caseSensitive);
+        refreshMatchInfo(view);
+      });
+    },
+    [withView, refreshMatchInfo],
+  );
+
+  const handleQueryChange = useCallback(
+    (q: string) => {
+      setFindQuery(q);
+      runSearch(q, findCaseSensitive);
+    },
+    [runSearch, findCaseSensitive],
+  );
+
+  const handleToggleCase = useCallback(() => {
+    setFindCaseSensitive((prev) => {
+      const next = !prev;
+      runSearch(findQuery, next);
+      return next;
+    });
+  }, [runSearch, findQuery]);
+
+  const findNext = useCallback(() => {
+    withView((view) => {
+      nextMatch(view);
+      refreshMatchInfo(view);
+    });
+  }, [withView, refreshMatchInfo]);
+
+  const findPrev = useCallback(() => {
+    withView((view) => {
+      prevMatch(view);
+      refreshMatchInfo(view);
+    });
+  }, [withView, refreshMatchInfo]);
+
+  const doReplace = useCallback(() => {
+    withView((view) => {
+      replaceCurrent(view, findReplacement);
+      refreshMatchInfo(view);
+    });
+  }, [withView, refreshMatchInfo, findReplacement]);
+
+  const doReplaceAll = useCallback(() => {
+    withView((view) => {
+      replaceAll(view, findReplacement);
+      refreshMatchInfo(view);
+    });
+  }, [withView, refreshMatchInfo, findReplacement]);
+
+  const openFind = useCallback(
+    (mode: "find" | "replace") => {
+      setFindMode(mode);
+      setFindOpen(true);
+      withView((view) => {
+        // Seed the query from a single-line selection, if any.
+        const { from, to } = view.state.selection;
+        let query = findQuery;
+        if (to > from) {
+          const sel = view.state.doc.textBetween(from, to);
+          if (sel && !sel.includes("\n")) {
+            query = sel;
+            setFindQuery(sel);
+          }
+        }
+        setSearch(view, query, findCaseSensitive);
+        refreshMatchInfo(view);
+      });
+    },
+    [withView, refreshMatchInfo, findQuery, findCaseSensitive],
+  );
+
+  const closeFind = useCallback(() => {
+    withView((view) => {
+      clearSearch(view);
+      view.focus();
+    });
+    setFindOpen(false);
+  }, [withView]);
+
+  const handleFind = useCallback(() => openFind("find"), [openFind]);
+  const handleReplace = useCallback(() => openFind("replace"), [openFind]);
 
   const confirmDiscard = useCallback(async () => {
     if (!stateRef.current.dirty) return true;
@@ -528,6 +646,19 @@ function App() {
           await PredefinedMenuItem.new({ item: "Copy" }),
           await PredefinedMenuItem.new({ item: "Paste" }),
           await PredefinedMenuItem.new({ item: "SelectAll" }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "find",
+            text: "Find…",
+            accelerator: "CmdOrCtrl+F",
+            action: () => handleFind(),
+          }),
+          await MenuItem.new({
+            id: "replace",
+            text: "Find and Replace…",
+            accelerator: "CmdOrCtrl+Alt+F",
+            action: () => handleReplace(),
+          }),
         ],
       });
 
@@ -745,6 +876,8 @@ function App() {
     handleClose,
     handleShowInFinder,
     handleSetAsDefault,
+    handleFind,
+    handleReplace,
     handleReportBug,
     handleSuggestFeature,
     handleViewRepo,
@@ -769,6 +902,23 @@ function App() {
 
   return (
     <main className="app">
+      {findOpen && (
+        <FindReplace
+          mode={findMode}
+          query={findQuery}
+          replacement={findReplacement}
+          caseSensitive={findCaseSensitive}
+          matchInfo={matchInfo}
+          onQueryChange={handleQueryChange}
+          onReplacementChange={setFindReplacement}
+          onToggleCase={handleToggleCase}
+          onNext={findNext}
+          onPrev={findPrev}
+          onReplace={doReplace}
+          onReplaceAll={doReplaceAll}
+          onClose={closeFind}
+        />
+      )}
       <section className="editor-wrap">
         <MarkyEditor
           key={editorKey}
