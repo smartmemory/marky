@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
@@ -418,8 +419,9 @@ function App() {
 
   const handleReportBug = useCallback(async () => {
     const ua = navigator.userAgent;
+    const version = await getVersion();
     const body = encodeURIComponent(
-      `**Marky version:** 0.1.5\n**OS / build:** ${ua}\n\n**What happened?**\n\n\n**Steps to reproduce:**\n1. \n2. \n3. \n`,
+      `**Marky version:** ${version}\n**OS / build:** ${ua}\n\n**What happened?**\n\n\n**Steps to reproduce:**\n1. \n2. \n3. \n`,
     );
     await openUrl(
       `https://github.com/smartmemory/marky/issues/new?template=bug.yml&body=${body}`,
@@ -558,6 +560,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const appVersion = await getVersion();
       const recentItems = await Promise.all(
         recents.map((p, i) =>
           MenuItem.new({
@@ -826,7 +829,7 @@ function App() {
         text: "Marky",
         items: [
           await PredefinedMenuItem.new({
-            item: { About: { name: "Marky", version: "0.1.5" } },
+            item: { About: { name: "Marky", version: appVersion } },
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({

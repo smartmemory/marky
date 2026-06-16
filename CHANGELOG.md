@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The About dialog and the bug-report template now read the app version
+  dynamically via `getVersion()` instead of a hardcoded string, so they no
+  longer go stale on release.
+
 ## v0.1.5
 
 ### Added
