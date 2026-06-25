@@ -310,3 +310,88 @@ html, body, #root {
   white-space: pre-wrap;
   font-size: 0.85em;
 }
+
+/* Frontmatter panel */
+.marky-frontmatter {
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.marky-frontmatter-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  outline: none;
+}
+
+.marky-frontmatter-header:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 8px;
+}
+
+.marky-frontmatter-disclosure {
+  width: 1em;
+  text-align: center;
+}
+
+.marky-frontmatter-title {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.marky-frontmatter-keys {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.marky-frontmatter-remove {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.marky-frontmatter-remove:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.marky-frontmatter-body {
+  padding: 0 12px 12px;
+}
+
+.marky-frontmatter-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 4em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: calc(13px * var(--marky-zoom, 1));
+  color: var(--code-fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.marky-frontmatter-textarea:focus {
+  border-color: var(--accent);
+}
