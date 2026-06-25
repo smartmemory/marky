@@ -24,6 +24,12 @@ export function splitFrontmatter(text: string): FrontmatterSplit {
     const line = stripCr(lines[i]);
     if (line === "---" || line === "...") {
       const fm = lines.slice(0, i).map(stripCr).join("\n");
+      // Guard against a body that merely opens with a thematic break: a real
+      // frontmatter block is either empty or has at least one top-level key.
+      // Prose between two `---` rules has neither, so treat it as body.
+      if (fm.trim() !== "" && frontmatterKeys(fm).length === 0) {
+        return { fm: null, body: text, closeDelim: "---" };
+      }
       const body = lines.slice(i + 1).map(stripCr).join("\n");
       return { fm, body, closeDelim: line };
     }

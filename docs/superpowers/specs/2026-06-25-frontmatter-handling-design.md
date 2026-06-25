@@ -217,6 +217,7 @@ frontmatter state            body state
 | Case | Behavior |
 | --- | --- |
 | File opens with `---` but no closing fence | Not frontmatter. Treated as body (thematic rule), exactly as today. |
+| File opens with `---` (thematic rule) and has a later `---`, but the captured block has no top-level YAML key | Not frontmatter. The block must be empty or contain at least one top-level `key:` to be treated as frontmatter, so prose between two rules stays in the body. |
 | Closing delimiter is `...` | Detected; `closeDelim = "..."` preserved on save. |
 | Leading BOM or blank line before `---` | No detection (strict first-line rule). Documented limitation. |
 | CRLF line endings | Detected; output normalized to `\n`. Body line endings already normalized by Milkdown. |

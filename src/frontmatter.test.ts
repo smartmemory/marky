@@ -58,6 +58,27 @@ describe("splitFrontmatter", () => {
     expect(r.fm).toBe("title: x");
     expect(r.body).toBe("# H\n\n---\n\nMore.");
   });
+
+  it("treats a body opening with a thematic break (prose between two rules) as body, not frontmatter", () => {
+    const text = "---\n\nIntro prose, not metadata.\n\n---\n\nMore.";
+    const r = splitFrontmatter(text);
+    expect(r.fm).toBeNull();
+    expect(r.body).toBe(text);
+  });
+
+  it("rejects a captured block with no top-level keys", () => {
+    const text = "---\nJust a sentence with no colon key.\n---\nBody.";
+    const r = splitFrontmatter(text);
+    expect(r.fm).toBeNull();
+    expect(r.body).toBe(text);
+  });
+
+  it("still accepts a block that has at least one top-level key", () => {
+    const text = "---\n\ntitle: x\n---\nBody.";
+    const r = splitFrontmatter(text);
+    expect(r.fm).toBe("\ntitle: x");
+    expect(r.body).toBe("Body.");
+  });
 });
 
 describe("joinFrontmatter", () => {
