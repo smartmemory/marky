@@ -8,6 +8,9 @@
 Open any `.md` file, read it the way it's meant to be read, edit it the way you'd
 edit a doc. No mode switches, no sidebars in the way, no syntax noise. Just text.
 
+YAML frontmatter is preserved and editable: files that open with a `---` block
+get a collapsible metadata panel, and the block round-trips without corruption.
+
 Cross-platform (macOS, Windows, Linux), open source, ~10 MB.
 
 ## Install

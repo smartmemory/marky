@@ -26,6 +26,8 @@ import { editorViewCtx, type Editor } from "@milkdown/core";
 import type { EditorView } from "@milkdown/prose/view";
 import { MarkyEditor, type EditorGetter } from "./Editor";
 import { FindReplace } from "./FindReplace";
+import { FrontmatterPanel } from "./FrontmatterPanel";
+import { splitFrontmatter, joinFrontmatter } from "./frontmatter";
 import {
   clearSearch,
   getSearchState,
@@ -91,7 +93,9 @@ function basename(p: string): string {
 }
 
 function App() {
-  const [content, setContent] = useState("");
+  const [body, setBody] = useState("");
+  const [frontmatter, setFrontmatter] = useState<string | null>(null);
+  const [closeDelim, setCloseDelim] = useState<"---" | "...">("---");
   const [path, setPath] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
@@ -165,8 +169,8 @@ function App() {
   }, [checkForUpdates]);
 
   // Stash latest values in refs so the menu's static action callbacks see fresh state.
-  const stateRef = useRef({ content, path, dirty, recents });
-  stateRef.current = { content, path, dirty, recents };
+  const stateRef = useRef({ body, frontmatter, closeDelim, path, dirty, recents });
+  stateRef.current = { body, frontmatter, closeDelim, path, dirty, recents };
 
   const getEditorRef = useRef<EditorGetter | null>(null);
   const onEditorReady = useCallback((g: EditorGetter) => {
@@ -305,7 +309,10 @@ function App() {
   const loadPath = useCallback(
     async (target: string) => {
       const text = await readTextFile(target);
-      setContent(text);
+      const split = splitFrontmatter(text);
+      setFrontmatter(split.fm);
+      setBody(split.body);
+      setCloseDelim(split.closeDelim);
       setPath(target);
       setDirty(false);
       setEditorKey((k) => k + 1);
@@ -317,7 +324,9 @@ function App() {
 
   const handleNew = useCallback(async () => {
     if (!(await confirmDiscard())) return;
-    setContent("");
+    setFrontmatter(null);
+    setBody("");
+    setCloseDelim("---");
     setPath(null);
     setDirty(false);
     setEditorKey((k) => k + 1);
@@ -363,7 +372,14 @@ function App() {
       if (!chosen) return;
       target = chosen;
     }
-    await writeTextFile(target, stateRef.current.content);
+    await writeTextFile(
+      target,
+      joinFrontmatter(
+        stateRef.current.frontmatter,
+        stateRef.current.body,
+        stateRef.current.closeDelim,
+      ),
+    );
     setPath(target);
     setDirty(false);
     pushRecent(target);
@@ -376,7 +392,14 @@ function App() {
       defaultPath: stateRef.current.path ?? undefined,
     });
     if (!chosen) return;
-    await writeTextFile(chosen, stateRef.current.content);
+    await writeTextFile(
+      chosen,
+      joinFrontmatter(
+        stateRef.current.frontmatter,
+        stateRef.current.body,
+        stateRef.current.closeDelim,
+      ),
+    );
     setPath(chosen);
     setDirty(false);
     pushRecent(chosen);
@@ -389,7 +412,10 @@ function App() {
     if (!(await confirmDiscard())) return;
     try {
       const text = await readTextFile(p);
-      setContent(text);
+      const split = splitFrontmatter(text);
+      setFrontmatter(split.fm);
+      setBody(split.body);
+      setCloseDelim(split.closeDelim);
       setDirty(false);
       setEditorKey((k) => k + 1);
     } catch (err) {
@@ -448,6 +474,13 @@ function App() {
     }
   }, []);
 
+  const handleInsertFrontmatter = useCallback(() => {
+    if (stateRef.current.frontmatter !== null) return;
+    setFrontmatter("");
+    setCloseDelim("---");
+    setDirty(true);
+  }, []);
+
   // Format commands routed into the Milkdown editor instance
   const fmtBold = useCallback(() => cmd(toggleStrongCommand), [cmd]);
   const fmtItalic = useCallback(() => cmd(toggleEmphasisCommand), [cmd]);
@@ -477,7 +510,14 @@ function App() {
             try {
               const fresh = await readTextFile(path);
               if (fresh === lastSeen) return;
-              if (fresh === stateRef.current.content) {
+              if (
+                fresh ===
+                joinFrontmatter(
+                  stateRef.current.frontmatter,
+                  stateRef.current.body,
+                  stateRef.current.closeDelim,
+                )
+              ) {
                 lastSeen = fresh;
                 return;
               }
@@ -489,7 +529,10 @@ function App() {
               });
               if (reload) {
                 lastSeen = fresh;
-                setContent(fresh);
+                const split = splitFrontmatter(fresh);
+                setFrontmatter(split.fm);
+                setBody(split.body);
+                setCloseDelim(split.closeDelim);
                 setDirty(false);
                 setEditorKey((k) => k + 1);
               }
@@ -555,6 +598,8 @@ function App() {
     const name = path ? basename(path) : "Untitled";
     win.setTitle(`${name}${dirty ? " — Edited" : ""} — Marky`).catch(() => {});
   }, [path, dirty]);
+
+  const hasFrontmatter = frontmatter !== null;
 
   // Build native menu. Rebuilds when recents or handlers change.
   useEffect(() => {
@@ -628,6 +673,13 @@ function App() {
             id: "revert",
             text: "Revert to Saved",
             action: () => handleRevert(),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "insert-frontmatter",
+            text: "Insert Frontmatter",
+            enabled: !hasFrontmatter,
+            action: () => handleInsertFrontmatter(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
@@ -896,10 +948,22 @@ function App() {
     fmtCodeBlock,
     fmtHr,
     fmtHeading,
+    handleInsertFrontmatter,
+    hasFrontmatter,
   ]);
 
   const handleChange = useCallback((md: string) => {
-    setContent(md);
+    setBody(md);
+    setDirty(true);
+  }, []);
+
+  const handleFrontmatterChange = useCallback((next: string) => {
+    setFrontmatter(next);
+    setDirty(true);
+  }, []);
+
+  const handleFrontmatterRemove = useCallback(() => {
+    setFrontmatter(null);
     setDirty(true);
   }, []);
 
@@ -923,9 +987,17 @@ function App() {
         />
       )}
       <section className="editor-wrap">
+        {frontmatter !== null && (
+          <FrontmatterPanel
+            key={editorKey}
+            value={frontmatter}
+            onChange={handleFrontmatterChange}
+            onRemove={handleFrontmatterRemove}
+          />
+        )}
         <MarkyEditor
           key={editorKey}
-          initial={content}
+          initial={body}
           onChange={handleChange}
           onReady={onEditorReady}
         />
