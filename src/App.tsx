@@ -474,6 +474,13 @@ function App() {
     }
   }, []);
 
+  const handleInsertFrontmatter = useCallback(() => {
+    if (stateRef.current.frontmatter !== null) return;
+    setFrontmatter("");
+    setCloseDelim("---");
+    setDirty(true);
+  }, []);
+
   // Format commands routed into the Milkdown editor instance
   const fmtBold = useCallback(() => cmd(toggleStrongCommand), [cmd]);
   const fmtItalic = useCallback(() => cmd(toggleEmphasisCommand), [cmd]);
@@ -592,6 +599,8 @@ function App() {
     win.setTitle(`${name}${dirty ? " — Edited" : ""} — Marky`).catch(() => {});
   }, [path, dirty]);
 
+  const hasFrontmatter = frontmatter !== null;
+
   // Build native menu. Rebuilds when recents or handlers change.
   useEffect(() => {
     let cancelled = false;
@@ -664,6 +673,13 @@ function App() {
             id: "revert",
             text: "Revert to Saved",
             action: () => handleRevert(),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "insert-frontmatter",
+            text: "Insert Frontmatter",
+            enabled: !hasFrontmatter,
+            action: () => handleInsertFrontmatter(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
@@ -932,6 +948,8 @@ function App() {
     fmtCodeBlock,
     fmtHr,
     fmtHeading,
+    handleInsertFrontmatter,
+    hasFrontmatter,
   ]);
 
   const handleChange = useCallback((md: string) => {
@@ -946,13 +964,6 @@ function App() {
 
   const handleFrontmatterRemove = useCallback(() => {
     setFrontmatter(null);
-    setDirty(true);
-  }, []);
-
-  const handleInsertFrontmatter = useCallback(() => {
-    if (stateRef.current.frontmatter !== null) return;
-    setFrontmatter("");
-    setCloseDelim("---");
     setDirty(true);
   }, []);
 
