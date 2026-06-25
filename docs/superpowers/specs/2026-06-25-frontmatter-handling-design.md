@@ -1,7 +1,7 @@
 # Marky Frontmatter Handling — Design
 
 - **Date:** 2026-06-25
-- **Status:** Approved (pending spec review)
+- **Status:** Implemented
 - **Topic:** YAML frontmatter preservation and editing
 - **Target version:** 0.1.6
 

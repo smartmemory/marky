@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v0.1.6
+
+### Added
+- YAML frontmatter is now preserved and editable. Files that begin with a `---`
+  block show a collapsible frontmatter panel above the document, and the raw
+  YAML round-trips losslessly instead of being mangled into a horizontal rule.
+  File menu has an "Insert Frontmatter" action for files that have none, and
+  clearing the panel removes the block on save.
 
 ### Changed
 - The About dialog and the bug-report template now read the app version
