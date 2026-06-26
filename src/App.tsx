@@ -600,7 +600,7 @@ function App() {
   useEffect(() => {
     const win = getCurrentWindow();
     const name = path ? basename(path) : "Untitled";
-    document.title = name;
+    document.title = name.replace(/\.mdx?$/i, "");
     win.setTitle(`${name}${dirty ? " — Edited" : ""} — Marky`).catch(() => {});
   }, [path, dirty]);
 
