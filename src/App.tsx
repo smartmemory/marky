@@ -481,6 +481,10 @@ function App() {
     setDirty(true);
   }, []);
 
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
   // Format commands routed into the Milkdown editor instance
   const fmtBold = useCallback(() => cmd(toggleStrongCommand), [cmd]);
   const fmtItalic = useCallback(() => cmd(toggleEmphasisCommand), [cmd]);
@@ -687,6 +691,13 @@ function App() {
             text: "Show in Finder",
             accelerator: "CmdOrCtrl+Ctrl+O",
             action: () => handleShowInFinder(),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
+          await MenuItem.new({
+            id: "print",
+            text: "Print…",
+            accelerator: "CmdOrCtrl+P",
+            action: () => handlePrint(),
           }),
         ],
       });
@@ -950,6 +961,7 @@ function App() {
     fmtHeading,
     handleInsertFrontmatter,
     hasFrontmatter,
+    handlePrint,
   ]);
 
   const handleChange = useCallback((md: string) => {

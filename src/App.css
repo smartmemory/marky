@@ -395,3 +395,52 @@ html, body, #root {
 .marky-frontmatter-textarea:focus {
   border-color: var(--accent);
 }
+
+@media print {
+  .marky-find,
+  .marky-frontmatter {
+    display: none !important;
+  }
+
+  html, body, #root {
+    height: auto;
+    background: #fff;
+    color: #000;
+  }
+
+  .app {
+    height: auto;
+  }
+
+  .editor-wrap {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .milkdown,
+  .milkdown .ProseMirror {
+    background: #fff !important;
+    color: #000 !important;
+    min-height: unset;
+  }
+
+  .milkdown pre {
+    background: #f4f4f5 !important;
+    color: #1f1f1f !important;
+    border: 1px solid #ccc;
+  }
+
+  .milkdown pre code,
+  .milkdown pre code * {
+    color: #1f1f1f !important;
+  }
+
+  .milkdown :not(pre) > code {
+    background: #eef2f7 !important;
+    color: #1f4f8c !important;
+  }
+
+  .milkdown a {
+    color: #2e7dd7;
+  }
+}

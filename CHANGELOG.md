@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.7
+
+### Added
+- Print support (File > Print… or Cmd+P). Opens the native macOS print panel,
+  which includes Save as PDF, Open in Preview, and other PDF options via the
+  built-in PDF dropdown. The editor chrome (Find/Replace bar, frontmatter panel)
+  is hidden during printing so only the document content renders on the page.
+
 ## v0.1.6
 
 ### Added
