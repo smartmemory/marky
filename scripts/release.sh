@@ -86,7 +86,8 @@ command -v gh >/dev/null 2>&1 || fail 'gh is required.'
 ACCOUNTS="$(gh auth status --hostname github.com --json hosts --jq '.hosts[][] | .login' 2>/dev/null)" || fail 'Cannot read gh authentication status.'
 printf '%s\n' "$ACCOUNTS" | grep -Fxq "$ACCOUNT" || fail 'smartmem-dev must be present in gh auth status.'
 
-npm run tauri build -- --target universal-apple-darwin || fail 'Universal macOS build failed.'
+# Manual releases can't sign updater artifacts (key is CI-only), so skip them.
+npm run tauri build -- --target universal-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":false}}' || fail 'Universal macOS build failed.'
 DMG="$ROOT/src-tauri/target/universal-apple-darwin/release/bundle/dmg/Marky_${VERSION}_universal.dmg"
 [ -f "$DMG" ] || fail "Expected DMG does not exist: $DMG"
 SIZE="$(wc -c < "$DMG" | tr -d '[:space:]')"
