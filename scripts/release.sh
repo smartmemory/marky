@@ -100,7 +100,10 @@ fi
 
 printf '\nPublish %s? [y/N] ' "$TAG"
 ANSWER=''
-if ! read -r ANSWER < /dev/tty; then
+# RELEASE_YES=1 answers the prompt for unattended runs (preflight checks still apply).
+if [ "${RELEASE_YES:-}" = 1 ]; then
+  ANSWER=y; printf 'y (RELEASE_YES=1)\n'
+elif ! read -r ANSWER < /dev/tty; then
   fail 'Cannot read confirmation from /dev/tty; nothing tagged.'
 fi
 case "$ANSWER" in

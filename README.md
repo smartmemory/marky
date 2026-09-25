@@ -90,7 +90,8 @@ and download-only (no in-app auto-update).
 3. Commit and push the changes to `main`.
 4. Run `npm run release` on macOS and confirm publication when prompted.
    Optionally run `npm run release -- --dry-run` first; it builds the DMG and
-   previews the release without tagging or publishing.
+   previews the release without tagging or publishing. `RELEASE_YES=1 npm run release`
+   skips the confirmation prompt for unattended runs.
 
 The script requires the `smartmem-dev` account in `gh auth status` and restores
 the previously active GitHub account after publishing.
