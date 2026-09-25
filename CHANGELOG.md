@@ -7,6 +7,11 @@
   which includes Save as PDF, Open in Preview, and other PDF options via the
   built-in PDF dropdown. The editor chrome (Find/Replace bar, frontmatter panel)
   is hidden during printing so only the document content renders on the page.
+- Reopen the last document on launch by default. Toggle this behavior via
+  Marky > Reopen Last Document on Launch. Files opened by the OS take priority.
+
+### Changed
+- `npm run release` script for manual macOS releases.
 
 ## v0.1.6
 

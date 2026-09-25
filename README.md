@@ -43,6 +43,7 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - Double-click a `.md` file → it opens in Marky
 - WYSIWYG editing (CommonMark + GFM): bold, italic, headings, lists, quotes, code, links, tables
 - File menu: New, Open, Save, Save As, Revert, Recent Files, Show in Finder
+- Reopen the last document on launch by default — toggle via Marky → Reopen Last Document on Launch
 - Keyboard shortcuts (⌘N / ⌘O / ⌘S / ⌘⇧S, ⌘B / ⌘I / ⌘K, ⌘1–6 for headings, …)
 - Dirty-state tracking — warns before closing or discarding
 - File watcher — prompts to reload if the file changes on disk
@@ -78,6 +79,21 @@ Outputs:
 - macOS: `src-tauri/target/release/bundle/dmg/`
 - Windows: `src-tauri/target/release/bundle/msi/`
 - Linux: `src-tauri/target/release/bundle/{deb,appimage}/`
+
+## Releasing
+
+While GitHub Actions is blocked, manual releases are macOS-only universal builds
+and download-only (no in-app auto-update).
+
+1. Bump `version` in both `package.json` and `src-tauri/tauri.conf.json` to match.
+2. Add a `## v<ver>` section to `CHANGELOG.md` with the release notes.
+3. Commit and push the changes to `main`.
+4. Run `npm run release` on macOS and confirm publication when prompted.
+   Optionally run `npm run release -- --dry-run` first; it builds the DMG and
+   previews the release without tagging or publishing.
+
+The script requires the `smartmem-dev` account in `gh auth status` and restores
+the previously active GitHub account after publishing.
 
 ## Roadmap
 

@@ -28,6 +28,7 @@ import { MarkyEditor, type EditorGetter } from "./Editor";
 import { FindReplace } from "./FindReplace";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import { splitFrontmatter, joinFrontmatter } from "./frontmatter";
+import { pickStartupFile } from "./startup";
 import {
   clearSearch,
   getSearchState,
@@ -41,6 +42,7 @@ import "./App.css";
 
 const RECENTS_KEY = "marky.recents";
 const LAST_FILE_KEY = "marky.lastFile";
+const REOPEN_LAST_KEY = "marky.reopenLast";
 const THEME_KEY = "marky.theme";
 const ZOOM_KEY = "marky.zoom";
 const RECENTS_MAX = 10;
@@ -50,6 +52,10 @@ const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 
 type Theme = "system" | "light" | "dark";
+
+function loadReopenLast(): boolean {
+  return localStorage.getItem(REOPEN_LAST_KEY) !== "false";
+}
 
 function loadTheme(): Theme {
   const v = localStorage.getItem(THEME_KEY);
@@ -102,6 +108,8 @@ function App() {
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [zoom, setZoom] = useState<number>(loadZoom);
+  const [reopenLast, setReopenLast] = useState<boolean>(loadReopenLast);
+  const pendingFile = useRef<Promise<string | null> | null>(null);
 
   // Find / Replace bar
   const [findOpen, setFindOpen] = useState(false);
@@ -120,6 +128,10 @@ function App() {
     document.documentElement.style.setProperty("--marky-zoom", String(zoom));
     localStorage.setItem(ZOOM_KEY, String(zoom));
   }, [zoom]);
+
+  useEffect(() => {
+    localStorage.setItem(REOPEN_LAST_KEY, String(reopenLast));
+  }, [reopenLast]);
 
   const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + ZOOM_STEP)), []);
   const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - ZOOM_STEP)), []);
@@ -554,18 +566,39 @@ function App() {
     };
   }, [path]);
 
-  // Initial load: only files the OS asked us to open. Auto-reopen of the last
-  // file is intentionally disabled — touching the filesystem before any user
-  // interaction can collide with macOS TCC prompts and stall startup.
+  // Initial load: OS files win; otherwise optionally reopen the last document.
+  // Defer last-file filesystem access until after the initial render so macOS
+  // TCC prompts do not gate the UI's startup path.
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     (async () => {
-      const pending = await invoke<string | null>("take_pending_file").catch(() => null);
+      // The command consumes the path; share it across StrictMode effect replays.
+      pendingFile.current ??= invoke<string | null>("take_pending_file").catch(() => null);
+      const pending = await pendingFile.current;
       if (cancelled) return;
-      if (pending) await loadPath(pending);
-    })();
+      const selected = pickStartupFile(pending, loadReopenLast(), localStorage.getItem(LAST_FILE_KEY));
+      if (!selected) return;
+      if (selected.source === "pending") {
+        await loadPath(selected.path);
+        return;
+      }
+      timer = setTimeout(() => {
+        (async () => {
+          if (cancelled) return;
+          const present = await exists(selected.path);
+          if (cancelled) return;
+          if (present) {
+            await loadPath(selected.path);
+          } else {
+            localStorage.removeItem(LAST_FILE_KEY);
+          }
+        })().catch(console.error);
+      }, 0);
+    })().catch(console.error);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [loadPath]);
 
@@ -908,6 +941,13 @@ function App() {
             action: () => handleSetAsDefault(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
+          await CheckMenuItem.new({
+            id: "reopen-last",
+            text: "Reopen Last Document on Launch",
+            checked: reopenLast,
+            action: () => setReopenLast((value) => !value),
+          }),
+          await PredefinedMenuItem.new({ item: "Separator" }),
           await PredefinedMenuItem.new({ item: "Services" }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await PredefinedMenuItem.new({ item: "Hide" }),
@@ -931,6 +971,7 @@ function App() {
   }, [
     recents,
     theme,
+    reopenLast,
     zoomIn,
     zoomOut,
     zoomReset,
