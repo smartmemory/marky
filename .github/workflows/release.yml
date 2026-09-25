@@ -51,6 +51,42 @@ jobs:
       - name: Install frontend deps
         run: npm install
 
+      - name: Configure Apple signing when credentials exist
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          NOTARY_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "$CERT" ]]; then
+            if [[ -n "$CERT_PASSWORD$SIGNING_IDENTITY$NOTARY_ID$NOTARY_PASSWORD$TEAM_ID" ]]; then
+              echo 'Incomplete Apple signing credentials' >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          if [[ -z "$CERT_PASSWORD" ]]; then
+            echo 'APPLE_CERTIFICATE_PASSWORD is required' >&2
+            exit 1
+          fi
+          printf 'APPLE_CERTIFICATE=%s\nAPPLE_CERTIFICATE_PASSWORD=%s\n' \
+            "$CERT" "$CERT_PASSWORD" >> "$GITHUB_ENV"
+          if [[ -n "$SIGNING_IDENTITY" ]]; then
+            printf 'APPLE_SIGNING_IDENTITY=%s\n' "$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "$NOTARY_ID$NOTARY_PASSWORD$TEAM_ID" ]]; then
+            if [[ -z "$NOTARY_ID" || -z "$NOTARY_PASSWORD" || -z "$TEAM_ID" ]]; then
+              echo 'Incomplete Apple notarization credentials' >&2
+              exit 1
+            fi
+            printf 'APPLE_ID=%s\nAPPLE_PASSWORD=%s\nAPPLE_TEAM_ID=%s\n' \
+              "$NOTARY_ID" "$NOTARY_PASSWORD" "$TEAM_ID" >> "$GITHUB_ENV"
+          fi
+
       - name: Build & release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -58,21 +94,6 @@ jobs:
           # Tauri updater signing (already configured)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Apple code signing + notarization (macOS only).
-          # If these secrets are unset the build still succeeds, just unsigned.
-          # Required secrets:
-          #   APPLE_CERTIFICATE          base64 of the Developer ID Application .p12
-          #   APPLE_CERTIFICATE_PASSWORD password for that .p12
-          #   APPLE_SIGNING_IDENTITY     e.g. "Developer ID Application: Name (TEAMID)"
-          #   APPLE_ID                   Apple Developer account email
-          #   APPLE_PASSWORD             app-specific password for that Apple ID
-          #   APPLE_TEAM_ID              10-char Apple Developer Team ID
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Marky ${{ github.ref_name }}'

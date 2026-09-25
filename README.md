@@ -82,16 +82,20 @@ Outputs:
 
 ## Releasing
 
-While GitHub Actions is blocked, manual releases are macOS-only universal builds
-and download-only (no in-app auto-update).
+GitHub Actions is the primary release path. Pushing a `v*` tag builds
+macOS, Linux, and Windows releases, signs updater artifacts, and publishes
+`latest.json` for in-app "Check for Updates".
 
 1. Bump `version` in both `package.json` and `src-tauri/tauri.conf.json` to match.
 2. Add a `## v<ver>` section to `CHANGELOG.md` with the release notes.
 3. Commit and push the changes to `main`.
-4. Run `npm run release` on macOS and confirm publication when prompted.
-   Optionally run `npm run release -- --dry-run` first; it builds the DMG and
-   previews the release without tagging or publishing. `RELEASE_YES=1 npm run release`
-   skips the confirmation prompt for unattended runs.
+4. Create and push the matching `v<ver>` tag to trigger GitHub Actions.
+
+`npm run release` is the macOS-only, download-only fallback. It builds a
+universal DMG without in-app updater artifacts. Run it on macOS and confirm
+publication when prompted. Optionally run `npm run release -- --dry-run` first;
+it builds the DMG and previews the release without tagging or publishing.
+`RELEASE_YES=1 npm run release` skips the confirmation prompt for unattended runs.
 
 The script requires the `smartmem-dev` account in `gh auth status` and restores
 the previously active GitHub account after publishing.

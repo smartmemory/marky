@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.8
+
+### Fixed
+- Release CI builds again on all platforms. Removed the stale macOS-only
+  lockfile and only pass Apple signing environment variables when secrets exist,
+  restoring signed updater artifacts and `latest.json` so in-app "Check for Updates"
+  works again.
+
 ## v0.1.7
 
 ### Added
