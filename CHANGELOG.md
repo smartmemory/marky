@@ -6,7 +6,8 @@
 - Release CI builds again on all platforms. Removed the stale macOS-only
   lockfile and only pass Apple signing environment variables when secrets exist,
   restoring signed updater artifacts and `latest.json` so in-app "Check for Updates"
-  works again.
+  works again. Tauri npm packages are pinned to the Rust crates' minor versions
+  so CI no longer fails on a version-mismatch check.
 
 ## v0.1.7
 
