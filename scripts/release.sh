@@ -16,6 +16,8 @@ case "$#" in
   *) fail 'Usage: npm run release [-- --dry-run]' ;;
 esac
 
+# Prefer rustup's toolchain: Homebrew's rustc ships only the host target, not x86_64.
+[ -d "$HOME/.cargo/bin" ] && PATH="$HOME/.cargo/bin:$PATH"
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
 REPO='smartmemory/marky'
