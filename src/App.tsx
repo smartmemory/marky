@@ -30,6 +30,8 @@ import { FrontmatterPanel } from "./FrontmatterPanel";
 import { splitFrontmatter, joinFrontmatter } from "./frontmatter";
 import { pickStartupFile } from "./startup";
 import { classifyLink, isOpenableFile } from "./links";
+import { NavHistory } from "./navHistory";
+import { scrollToFragment } from "./linkFollowPlugin";
 import {
   clearSearch,
   getSearchState,
@@ -112,6 +114,19 @@ function App() {
   const [reopenLast, setReopenLast] = useState<boolean>(loadReopenLast);
   const pendingFile = useRef<Promise<string | null> | null>(null);
 
+  const historyRef = useRef(new NavHistory());
+  const [historyFlags, setHistoryFlags] = useState({ canBack: false, canForward: false, length: 0 });
+  const scrollRef = useRef<HTMLElement | null>(null);
+  const navigating = useRef(false);
+  const pendingRestore = useRef<{ scrollTop: number; fragment?: string } | null>(null);
+  const refreshHistory = useCallback(() => {
+    const h = historyRef.current;
+    setHistoryFlags({ canBack: h.canBack, canForward: h.canForward, length: h.length });
+  }, []);
+  const recordScroll = useCallback(() => {
+    historyRef.current.updateCurrent({ scrollTop: scrollRef.current?.scrollTop ?? 0 });
+  }, []);
+
   // Find / Replace bar
   const [findOpen, setFindOpen] = useState(false);
   const [findMode, setFindMode] = useState<"find" | "replace">("find");
@@ -188,6 +203,20 @@ function App() {
   const getEditorRef = useRef<EditorGetter | null>(null);
   const onEditorReady = useCallback((g: EditorGetter) => {
     getEditorRef.current = g;
+    const restore = pendingRestore.current;
+    if (!restore) return;
+    // Let the remounted editor focus and the browser lay out its content first.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (pendingRestore.current !== restore || getEditorRef.current !== g) return;
+      pendingRestore.current = null;
+      const ed = g();
+      if (!ed) return;
+      if (scrollRef.current) scrollRef.current.scrollTop = restore.scrollTop;
+      const fragment = restore.fragment;
+      if (fragment) {
+        ed.action((ctx) => scrollToFragment(ctx.get(editorViewCtx), fragment));
+      }
+    }));
   }, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -320,8 +349,9 @@ function App() {
   }, []);
 
   const loadPath = useCallback(
-    async (target: string) => {
+    async (target: string, restore: { scrollTop: number; fragment?: string }) => {
       const text = await readTextFile(target);
+      pendingRestore.current = restore;
       const split = splitFrontmatter(text);
       setFrontmatter(split.fm);
       setBody(split.body);
@@ -334,6 +364,75 @@ function App() {
     },
     [pushRecent],
   );
+
+  // All file-opening entry points go through here; history traversal uses loadPath directly.
+  // Only link follows extend history; any other open starts a fresh history at that document.
+  const navigateTo = useCallback(async (target: string, fragment?: string, viaLink = false) => {
+    if (navigating.current || pendingRestore.current) return;
+    navigating.current = true;
+    try {
+      if (!(await confirmDiscard())) return;
+      recordScroll();
+      await loadPath(target, { scrollTop: 0, fragment });
+      if (!viaLink) historyRef.current.clear();
+      historyRef.current.push({ path: target, scrollTop: 0 });
+      refreshHistory();
+    } catch (err) {
+      console.error("Couldn't open document:", err);
+    } finally {
+      navigating.current = false;
+    }
+  }, [confirmDiscard, recordScroll, loadPath, refreshHistory]);
+
+  const travelHistory = useCallback(async (direction: "back" | "forward") => {
+    if (navigating.current || pendingRestore.current) return;
+    navigating.current = true;
+    try {
+      if (!(await confirmDiscard())) return;
+      recordScroll();
+      // Traverse a copy so cancellation/read failures never move the live cursor.
+      const candidate = historyRef.current.clone();
+      const missing = new Set<string>();
+      let target = candidate[direction]();
+      while (target) {
+        if (!missing.has(target.path) && await exists(target.path)) {
+          await loadPath(target.path, { scrollTop: target.scrollTop });
+          for (const path of missing) candidate.remove(path);
+          historyRef.current = candidate;
+          return;
+        }
+        missing.add(target.path);
+        historyRef.current.remove(target.path);
+        target = candidate[direction]();
+      }
+    } catch (err) {
+      console.error("Couldn't navigate history:", err);
+    } finally {
+      refreshHistory();
+      navigating.current = false;
+    }
+  }, [confirmDiscard, recordScroll, loadPath, refreshHistory]);
+
+  const handleBack = useCallback(() => travelHistory("back"), [travelHistory]);
+  const handleForward = useCallback(() => travelHistory("forward"), [travelHistory]);
+
+  useEffect(() => {
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return;
+      event.preventDefault();
+      void (event.button === 3 ? handleBack() : handleForward());
+    };
+    // Suppress the browser's own navigation without firing twice for one gesture.
+    const suppressAuxClick = (event: MouseEvent) => {
+      if (event.button === 3 || event.button === 4) event.preventDefault();
+    };
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("auxclick", suppressAuxClick);
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("auxclick", suppressAuxClick);
+    };
+  }, [handleBack, handleForward]);
 
   // Cmd/Ctrl+click on a link that the editor didn't resolve itself (i.e. not
   // an in-doc `#anchor`, which it handles without needing App state).
@@ -356,9 +455,8 @@ function App() {
             });
             return;
           }
-          if (!(await confirmDiscard())) return;
           try {
-            await loadPath(target.path);
+            await navigateTo(target.path, target.fragment, true);
           } catch (err) {
             console.error(err);
           }
@@ -368,11 +466,16 @@ function App() {
           return;
       }
     },
-    [confirmDiscard, loadPath],
+    [navigateTo],
   );
 
   const handleNew = useCallback(async () => {
+    if (navigating.current || pendingRestore.current) return;
     if (!(await confirmDiscard())) return;
+    recordScroll();
+    historyRef.current.clear();
+    refreshHistory();
+    pendingRestore.current = null;
     setFrontmatter(null);
     setBody("");
     setCloseDelim("---");
@@ -380,20 +483,18 @@ function App() {
     setDirty(false);
     setEditorKey((k) => k + 1);
     localStorage.removeItem(LAST_FILE_KEY);
-  }, [confirmDiscard]);
+  }, [confirmDiscard, recordScroll, refreshHistory]);
 
   const handleOpen = useCallback(async () => {
-    if (!(await confirmDiscard())) return;
     const selected = await open({
       multiple: false,
       filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
     });
-    if (typeof selected === "string") await loadPath(selected);
-  }, [confirmDiscard, loadPath]);
+    if (typeof selected === "string") await navigateTo(selected);
+  }, [navigateTo]);
 
   const handleOpenRecent = useCallback(
     async (p: string) => {
-      if (!(await confirmDiscard())) return;
       try {
         if (!(await exists(p))) {
           // Drop missing files from recents
@@ -404,13 +505,20 @@ function App() {
           });
           return;
         }
-        await loadPath(p);
+        await navigateTo(p);
       } catch (err) {
         console.error(err);
       }
     },
-    [confirmDiscard, loadPath],
+    [navigateTo],
   );
+
+  const recordSavedPath = useCallback((path: string) => {
+    const entry = { path, scrollTop: scrollRef.current?.scrollTop ?? 0 };
+    if (historyRef.current.current) historyRef.current.updateCurrent(entry);
+    else historyRef.current.push(entry);
+    refreshHistory();
+  }, [refreshHistory]);
 
   const handleSave = useCallback(async () => {
     let target = stateRef.current.path;
@@ -429,11 +537,12 @@ function App() {
         stateRef.current.closeDelim,
       ),
     );
+    recordSavedPath(target);
     setPath(target);
     setDirty(false);
     pushRecent(target);
     localStorage.setItem(LAST_FILE_KEY, target);
-  }, [pushRecent]);
+  }, [pushRecent, recordSavedPath]);
 
   const handleSaveAs = useCallback(async () => {
     const chosen = await save({
@@ -449,11 +558,12 @@ function App() {
         stateRef.current.closeDelim,
       ),
     );
+    recordSavedPath(chosen);
     setPath(chosen);
     setDirty(false);
     pushRecent(chosen);
     localStorage.setItem(LAST_FILE_KEY, chosen);
-  }, [pushRecent]);
+  }, [pushRecent, recordSavedPath]);
 
   const handleRevert = useCallback(async () => {
     const p = stateRef.current.path;
@@ -474,8 +584,11 @@ function App() {
 
   const handleClose = useCallback(async () => {
     if (!(await confirmDiscard())) return;
+    recordScroll();
+    historyRef.current.clear();
+    refreshHistory();
     await getCurrentWindow().close();
-  }, [confirmDiscard]);
+  }, [confirmDiscard, recordScroll, refreshHistory]);
 
   const handleSetAsDefault = useCallback(async () => {
     try {
@@ -617,7 +730,7 @@ function App() {
       const selected = pickStartupFile(pending, loadReopenLast(), localStorage.getItem(LAST_FILE_KEY));
       if (!selected) return;
       if (selected.source === "pending") {
-        await loadPath(selected.path);
+        await navigateTo(selected.path);
         return;
       }
       timer = setTimeout(() => {
@@ -626,7 +739,7 @@ function App() {
           const present = await exists(selected.path);
           if (cancelled) return;
           if (present) {
-            await loadPath(selected.path);
+            await navigateTo(selected.path);
           } else {
             localStorage.removeItem(LAST_FILE_KEY);
           }
@@ -637,19 +750,18 @@ function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [loadPath]);
+  }, [navigateTo]);
 
   // OS open-file events while running
   useEffect(() => {
     const unlisten = listen<string>("open-file", async (e) => {
       if (!e.payload) return;
-      if (!(await confirmDiscard())) return;
-      await loadPath(e.payload);
+      await navigateTo(e.payload);
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [confirmDiscard, loadPath]);
+  }, [navigateTo]);
 
   // Drag-drop file onto the window
   useEffect(() => {
@@ -658,13 +770,12 @@ function App() {
       if (event.payload.type !== "drop") return;
       const paths = event.payload.paths;
       if (!paths.length) return;
-      if (!(await confirmDiscard())) return;
-      await loadPath(paths[0]);
+      await navigateTo(paths[0]);
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [confirmDiscard, loadPath]);
+  }, [navigateTo]);
 
   // Keep window title + edited indicator in sync
   useEffect(() => {
@@ -926,6 +1037,20 @@ function App() {
         ],
       });
 
+      const goMenu = await Submenu.new({
+        text: "Go",
+        items: [
+          await MenuItem.new({
+            id: "nav-back", text: "Back", accelerator: "CmdOrCtrl+[",
+            enabled: historyFlags.canBack, action: () => handleBack(),
+          }),
+          await MenuItem.new({
+            id: "nav-forward", text: "Forward", accelerator: "CmdOrCtrl+]",
+            enabled: historyFlags.canForward, action: () => handleForward(),
+          }),
+        ],
+      });
+
       const helpMenu = await Submenu.new({
         text: "Help",
         items: [
@@ -996,7 +1121,7 @@ function App() {
       });
 
       const menu = await Menu.new({
-        items: [appMenu, fileMenu, editMenu, formatMenu, viewMenu, windowMenu, helpMenu],
+        items: [appMenu, fileMenu, editMenu, formatMenu, viewMenu, goMenu, windowMenu, helpMenu],
       });
 
       if (cancelled) return;
@@ -1006,6 +1131,10 @@ function App() {
       cancelled = true;
     };
   }, [
+    historyFlags.canBack,
+    historyFlags.canForward,
+    handleBack,
+    handleForward,
     recents,
     theme,
     reopenLast,
@@ -1060,6 +1189,14 @@ function App() {
 
   return (
     <main className="app">
+      {historyFlags.length >= 2 && (
+        <nav className="marky-nav" aria-label="Document history">
+          <button type="button" className="marky-find-btn" aria-label="Back"
+            title="Back (Cmd/Ctrl+[)" disabled={!historyFlags.canBack} onClick={handleBack}>◀</button>
+          <button type="button" className="marky-find-btn" aria-label="Forward"
+            title="Forward (Cmd/Ctrl+])" disabled={!historyFlags.canForward} onClick={handleForward}>▶</button>
+        </nav>
+      )}
       {findOpen && (
         <FindReplace
           mode={findMode}
@@ -1077,7 +1214,7 @@ function App() {
           onClose={closeFind}
         />
       )}
-      <section className="editor-wrap">
+      <section className="editor-wrap" ref={scrollRef}>
         {frontmatter !== null && (
           <FrontmatterPanel
             key={editorKey}

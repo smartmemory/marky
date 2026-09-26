@@ -37,7 +37,7 @@ function findHeadingPos(doc: ProseNode, fragment: string): number | null {
 }
 
 /** Move the selection to a matching heading and scroll it into view. No match: warn and do nothing. */
-function scrollToFragment(view: EditorView, fragment: string) {
+export function scrollToFragment(view: EditorView, fragment: string) {
   const pos = findHeadingPos(view.state.doc, fragment);
   if (pos === null) {
     console.warn(`Marky: no heading matches #${fragment}`);

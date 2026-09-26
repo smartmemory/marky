@@ -50,7 +50,10 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - Drag a `.md` file onto the window to open it
 - Cmd+click (Ctrl+click on Windows/Linux) a link to follow it: opens external
   links in your browser, jumps to `#heading` anchors, opens relative or
-  absolute local file links in Marky
+  absolute local file links in Marky (including `other.md#section` heading jumps)
+- Back/Forward restores documents and scroll positions: Cmd+[ / Cmd+] on macOS
+  (Ctrl+[ / Ctrl+] on Windows/Linux), Go menu, arrow buttons, or mouse back/forward buttons. History
+  covers link-followed documents since the last Open / Open Recent / drag-drop
 - Light / Dark / System theme
 - Zoom in/out (⌘+ / ⌘− / ⌘0 to reset) — persists across sessions
 - Auto-update — checks GitHub Releases on launch (and via Marky → Check for Updates…), installs signed updates with one click

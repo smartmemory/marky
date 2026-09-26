@@ -74,6 +74,15 @@ html, body, #root {
   position: relative;
 }
 
+/* Compact document history controls; theme colors come from the shared buttons. */
+.marky-nav {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Find / Replace bar */
 .marky-find {
   position: absolute;
@@ -402,6 +411,7 @@ html, body, #root {
 }
 
 @media print {
+  .marky-nav,
   .marky-find,
   .marky-frontmatter {
     display: none !important;

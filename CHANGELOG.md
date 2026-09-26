@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Back/Forward document history restores files and scroll positions via the Go
+  menu, Cmd/Ctrl+[ and Cmd/Ctrl+], arrow buttons, or mouse back/forward buttons.
+  History covers documents reached by following links. Opening a document
+  any other way (Open, Open Recent, drag-drop, launch) starts a fresh history.
+
+### Fixed
+- File links such as `other.md#section` now scroll to the matching heading after opening.
+
 ## v0.1.9
 
 ### Added
