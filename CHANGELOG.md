@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.9
 
 ### Added
 - Cmd+click (Ctrl+click on Windows/Linux) a link to follow it. An external
