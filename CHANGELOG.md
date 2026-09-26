@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.10
 
 ### Added
 - Back/Forward document history restores files and scroll positions via the Go
