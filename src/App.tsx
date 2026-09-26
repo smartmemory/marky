@@ -29,6 +29,7 @@ import { FindReplace } from "./FindReplace";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import { splitFrontmatter, joinFrontmatter } from "./frontmatter";
 import { pickStartupFile } from "./startup";
+import { classifyLink, isOpenableFile } from "./links";
 import {
   clearSearch,
   getSearchState,
@@ -332,6 +333,42 @@ function App() {
       localStorage.setItem(LAST_FILE_KEY, target);
     },
     [pushRecent],
+  );
+
+  // Cmd/Ctrl+click on a link that the editor didn't resolve itself (i.e. not
+  // an in-doc `#anchor`, which it handles without needing App state).
+  const handleFollowLink = useCallback(
+    async (href: string) => {
+      const target = classifyLink(href, stateRef.current.path);
+      switch (target.kind) {
+        case "external":
+          await openUrl(target.url);
+          return;
+        case "file":
+          if (!isOpenableFile(target.path)) {
+            console.warn(`Marky: not opening unsupported file link: ${target.path}`);
+            return;
+          }
+          if (!(await exists(target.path))) {
+            await message(`Can't find ${target.path}`, {
+              title: "Link not found",
+              kind: "warning",
+            });
+            return;
+          }
+          if (!(await confirmDiscard())) return;
+          try {
+            await loadPath(target.path);
+          } catch (err) {
+            console.error(err);
+          }
+          return;
+        case "anchor":
+        case "unsupported":
+          return;
+      }
+    },
+    [confirmDiscard, loadPath],
   );
 
   const handleNew = useCallback(async () => {
@@ -1054,6 +1091,7 @@ function App() {
           initial={body}
           onChange={handleChange}
           onReady={onEditorReady}
+          onFollowLink={handleFollowLink}
         />
       </section>
     </main>

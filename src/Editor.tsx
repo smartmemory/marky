@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import "@milkdown/theme-nord/style.css";
 import { mermaidPlugin } from "./mermaidPlugin";
 import { searchPlugin } from "./searchPlugin";
+import { createLinkFollowPlugin } from "./linkFollowPlugin";
 
 export type EditorGetter = () => Editor | undefined;
 
@@ -18,11 +19,15 @@ type Props = {
   initial: string;
   onChange: (markdown: string) => void;
   onReady?: (getEditor: EditorGetter) => void;
+  /** Cmd/Ctrl+click on a link that isn't an in-doc anchor (App owns the current file path). */
+  onFollowLink?: (href: string) => void;
 };
 
-function MilkdownEditor({ initial, onChange, onReady }: Props) {
+function MilkdownEditor({ initial, onChange, onReady, onFollowLink }: Props) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onFollowLinkRef = useRef(onFollowLink);
+  onFollowLinkRef.current = onFollowLink;
 
   const { get, loading } = useEditor((root) =>
     Editor.make()
@@ -40,7 +45,8 @@ function MilkdownEditor({ initial, onChange, onReady }: Props) {
       .use(clipboard)
       .use(listener)
       .use(mermaidPlugin)
-      .use(searchPlugin),
+      .use(searchPlugin)
+      .use(createLinkFollowPlugin((href) => onFollowLinkRef.current?.(href))),
   );
 
   // Once the editor finishes creating, expose it and place the cursor inside it.

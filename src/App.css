@@ -218,6 +218,11 @@ html, body, #root {
   color: var(--accent);
 }
 
+/* Cmd/Ctrl-click follows a link; show a pointer while the modifier is held. */
+.milkdown .ProseMirror.marky-link-modifier-active a {
+  cursor: pointer;
+}
+
 .milkdown table,
 .milkdown thead,
 .milkdown tbody,

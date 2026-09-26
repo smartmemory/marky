@@ -48,6 +48,9 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - Dirty-state tracking — warns before closing or discarding
 - File watcher — prompts to reload if the file changes on disk
 - Drag a `.md` file onto the window to open it
+- Cmd+click (Ctrl+click on Windows/Linux) a link to follow it: opens external
+  links in your browser, jumps to `#heading` anchors, opens relative or
+  absolute local file links in Marky
 - Light / Dark / System theme
 - Zoom in/out (⌘+ / ⌘− / ⌘0 to reset) — persists across sessions
 - Auto-update — checks GitHub Releases on launch (and via Marky → Check for Updates…), installs signed updates with one click

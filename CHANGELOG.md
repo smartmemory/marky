@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Cmd+click (Ctrl+click on Windows/Linux) a link to follow it. An external
+  `http(s)`/`mailto` link opens in your browser or mail client, a `#heading`
+  link jumps to the matching heading in the current document, and a relative
+  or absolute `.md`/`.markdown`/`.txt` link opens that file in Marky.
+
 ## v0.1.8
 
 ### Fixed
