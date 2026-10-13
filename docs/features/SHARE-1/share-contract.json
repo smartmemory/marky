@@ -1,0 +1,181 @@
+{
+  "_source": "docs/features/SHARE-1/design.md",
+  "_roadmap": "ROADMAP.md#share-1",
+  "_status": "DRAFT 2026-10-13 (revised after review r1). Frozen by plan.md step 0.2; any change after that bumps contractVersion.",
+  "contractVersion": 1,
+
+  "ShareLink": {
+    "description": "URL handed to people. Token lives in the fragment so it never reaches server logs. {shareHost} is a deploy setting (plan step 7.2, owner Q5), not a contract value.",
+    "format": "https://{shareHost}/d/{roomId}#t={token}",
+    "roomId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "note": "128-bit random, base64url" },
+    "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "note": "128-bit random, base64url. Valid for the one roomId it was issued with, see RelayAuth.roomBinding." }
+  },
+
+  "Role": { "enum": ["view", "edit", "owner"] },
+
+  "ShareCreateRequest": {
+    "method": "POST",
+    "path": "/api/v1/shares",
+    "body": {
+      "title": { "type": "string", "maxLength": 200 },
+      "clientVersion": { "type": "string", "note": "Marky semver, e.g. 0.1.11" }
+    }
+  },
+  "ShareCreateResponse": {
+    "status": 201,
+    "body": {
+      "roomId": { "$ref": "#/ShareLink/roomId" },
+      "viewToken": { "$ref": "#/ShareLink/token" },
+      "editToken": { "$ref": "#/ShareLink/token" },
+      "ownerToken": { "$ref": "#/ShareLink/token", "note": "stored only in the owner's app data (LocalShareRecord), never in a link" },
+      "viewUrl": { "type": "string" },
+      "editUrl": { "type": "string" },
+      "expiresAfterIdleDays": { "type": "integer" }
+    }
+  },
+  "OwnerRouteAuth": {
+    "applies": ["ShareRotateRequest", "ShareRevokeRequest", "ShareStatusRequest"],
+    "rule": "The bearer token must hash to the live owner row of the {roomId} in the path (RelayStore lookup by (roomId, tokenHash, role=owner)). Any other token, including a valid owner token of a different room, gets 401 ErrorBody unauthorized, with no field of that room in the body and no state change.",
+    "missingOrWrongScheme": "401 ErrorBody unauthorized"
+  },
+  "ShareRotateRequest": {
+    "method": "POST",
+    "path": "/api/v1/shares/{roomId}/rotate",
+    "headers": { "Authorization": "Bearer {ownerToken}" },
+    "auth": { "$ref": "#/OwnerRouteAuth" },
+    "body": { "role": { "enum": ["view", "edit"] } },
+    "response": { "status": 200, "body": { "token": { "$ref": "#/ShareLink/token" }, "url": { "type": "string" } } },
+    "effect": "Old token for that role in that room is rejected on next connect; live connections using it are closed with CloseCode.revoked."
+  },
+  "ShareRevokeRequest": {
+    "method": "DELETE",
+    "path": "/api/v1/shares/{roomId}",
+    "headers": { "Authorization": "Bearer {ownerToken}" },
+    "auth": { "$ref": "#/OwnerRouteAuth" },
+    "response": { "status": 204 },
+    "effect": "All connections to that room closed with CloseCode.revoked; room data deleted after Limits.revokeGraceHours."
+  },
+  "ShareStatusRequest": {
+    "method": "GET",
+    "path": "/api/v1/shares/{roomId}",
+    "headers": { "Authorization": "Bearer {ownerToken}" },
+    "auth": { "$ref": "#/OwnerRouteAuth" },
+    "response": { "status": 200, "body": { "connected": { "type": "integer" }, "lastActivityAt": { "type": "string", "format": "date-time" }, "sizeBytes": { "type": "integer" } } }
+  },
+
+  "RelayStore": {
+    "description": "Relay-side token table. Plaintext tokens are never stored.",
+    "tokens": {
+      "roomId": { "$ref": "#/ShareLink/roomId" },
+      "role": { "$ref": "#/Role" },
+      "tokenHash": { "type": "string", "note": "hex SHA-256 of the token" },
+      "createdAt": { "type": "string", "format": "date-time" },
+      "revokedAt": { "type": ["string", "null"], "format": "date-time", "note": "set by rotate (that role) or revoke (all roles)" }
+    },
+    "uniqueKey": ["roomId", "role", "tokenHash"],
+    "lookup": "WHERE roomId = ? AND tokenHash = ? AND revokedAt IS NULL. Never by tokenHash alone."
+  },
+
+  "RelayAuth": {
+    "transport": "WebSocket, Hocuspocus protocol (y-protocols sync + awareness, multiplexed). Clients must use @hocuspocus/provider; Hocuspocus documents that other server implementations generally do not work with its provider, so a different host means a different client provider (plan.md Shape).",
+    "url": "wss://{shareHost}/sync",
+    "documentName": "{roomId}",
+    "token": "{token} (view or edit token; owner token also accepted and acts as edit)",
+    "roomBinding": "onAuthenticate resolves (documentName, sha256(token)) through RelayStore.lookup. No room with that id: CloseCode.roomNotFound. Room exists but no live matching row (wrong, rotated, or another room's token of any role): CloseCode.forbidden. No sync message of that room is sent before authentication succeeds.",
+    "roleResult": "role=view sets Hocuspocus connectionConfig.readOnly=true; the server then sends the client scope 'readonly', otherwise 'read-write' (Hocuspocus AuthorizedScope). Clients read it from the provider 'authenticated' event (see ClientMode).",
+    "serverRule": "role=view: Hocuspocus refuses every incoming document update from that connection; the relay logs a WARNING with roomId for each such update (beforeHandleMessage hook); awareness updates are allowed."
+  },
+
+  "ClientMode": {
+    "enum": ["readonly", "editable"],
+    "initial": "readonly",
+    "rule": "Both clients use transitionTable verbatim (plan.md 4.2 and 5.2). LocalShareRecord.role identifies the token role, never offline permission. Only a persisted successfully authenticated scope can enable offline edits; refusal invalidates it before reload.",
+    "transitionTable": [
+      {"event": "Fresh join (no authenticated cache)", "authenticatedScope": "None", "mode": "readonly", "cacheAction": "Persist null; ignore LocalShareRecord.role for permission"},
+      {"event": "authenticated scope 'read-write'", "authenticatedScope": "read-write", "mode": "editable", "cacheAction": "Persist read-write before enabling edits"},
+      {"event": "authenticated scope 'readonly'", "authenticatedScope": "readonly", "mode": "readonly", "cacheAction": "Persist readonly; cached edit/owner role cannot enable edits"},
+      {"event": "Temporary transport loss (1000 normal closure, 1001 going away, 1006 abnormal closure, network failure or timeout; no authenticated refusal)", "authenticatedScope": "Retain last successfully authenticated scope", "mode": "editable only for read-write; otherwise readonly", "cacheAction": "Keep cached scope; editors queue offline edits and viewers stay readonly"},
+      {"event": "Offline reload of an existing session", "authenticatedScope": "Use persisted authenticatedScope, never role", "mode": "editable only for read-write; otherwise readonly", "cacheAction": "A cleared/null scope stays readonly until successful authentication"},
+      {"event": "4401 revoked / 4403 forbidden / authentication failure", "authenticatedScope": "Invalidate", "mode": "readonly", "cacheAction": "Disable mutations immediately and persist null before reload; stale role cannot restore edit mode"},
+      {"event": "4404 roomNotFound", "authenticatedScope": "Invalidate", "mode": "readonly", "cacheAction": "Persist null; no offline edit permission"},
+      {"event": "4413 docTooLarge", "authenticatedScope": "Invalidate", "mode": "readonly", "cacheAction": "Persist null; no offline edit permission until successful authentication"},
+      {"event": "4429 rateLimited", "authenticatedScope": "Invalidate", "mode": "readonly", "cacheAction": "Persist null; retry starts readonly until successful authentication"},
+      {"event": "4426 clientTooOld", "authenticatedScope": "Invalidate", "mode": "readonly", "cacheAction": "Persist null; compatible client must authenticate before editing"}
+    ],
+    "readonlyEffects": "editor not editable, readOnlyGuard rejects local doc-changing transactions, FrontmatterPanel readOnly, every mutating menu command disabled (plan.md 2a.9, 4.5)."
+  },
+
+  "ClientSession": {
+    "description": "Client-side unit of 'the open document'. Exactly one per window. Switching identity closes the old session after the new target loads (plan.md 2b.2).",
+    "identity": {
+      "oneOf": [
+        { "kind": { "const": "local" }, "path": { "type": "string" } },
+        { "kind": { "const": "shared" }, "roomId": { "$ref": "#/ShareLink/roomId" }, "shareHost": { "type": "string" } },
+        { "kind": { "const": "untitled" } }
+      ]
+    },
+    "owns": ["provider", "awareness", "yDocObservers", "persistenceWriter", "yDoc"],
+    "closeOrder": "flush persistence, then destroy provider, awareness, observers, persistence writer, yDoc. Idempotent."
+  },
+
+  "YDocLayout": {
+    "description": "Names inside the shared Y.Doc. Clients must not write other top-level names.",
+    "prosemirror": { "type": "Y.XmlFragment", "note": "bound by @milkdown/plugin-collab (y-prosemirror)" },
+    "frontmatter": { "type": "Y.Text", "note": "empty string with meta.hasFrontmatter=false means no frontmatter block. Written only through applyTextDiff / setFrontmatterPresent (plan.md 2a.3)." },
+    "meta": {
+      "type": "Y.Map",
+      "keys": {
+        "schemaVersion": { "type": "integer", "const": 1 },
+        "hasFrontmatter": { "type": "boolean" },
+        "closeDelim": { "enum": ["---", "..."] },
+        "title": { "type": "string" }
+      }
+    }
+  },
+
+  "AwarenessUser": {
+    "field": "user",
+    "shape": {
+      "name": { "type": "string", "maxLength": 40 },
+      "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+      "client": { "enum": ["desktop", "web"] }
+    }
+  },
+
+  "LocalShareRecord": {
+    "description": "Desktop app data, one JSON per room at {appDataDir}/shares/{roomId}.json; Yjs state alongside at {roomId}.ydoc",
+    "shape": {
+      "roomId": { "$ref": "#/ShareLink/roomId" },
+      "role": { "$ref": "#/Role" },
+      "authenticatedScope": { "enum": ["readonly", "read-write", null], "default": null, "note": "Persist ClientMode.transitionTable's cacheAction on desktop and in equivalent web IndexedDB metadata. Fresh or legacy records without this field are readonly. Revoke, forbidden and authentication failure clear it durably so offline reload cannot regain edit mode from role." },
+      "token": { "$ref": "#/ShareLink/token" },
+      "ownerToken": { "type": ["string", "null"] },
+      "localPath": { "type": ["string", "null"], "note": "owner's .md file, null for joined docs" },
+      "shareHost": { "type": "string" },
+      "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" }
+    }
+  },
+
+  "CloseCode": {
+    "revoked": 4401,
+    "forbidden": 4403,
+    "roomNotFound": 4404,
+    "docTooLarge": 4413,
+    "rateLimited": 4429,
+    "clientTooOld": 4426
+  },
+
+  "ErrorBody": {
+    "shape": { "error": { "enum": ["bad_request", "unauthorized", "not_found", "too_large", "rate_limited", "server_error"] }, "message": { "type": "string" } }
+  },
+
+  "Limits": {
+    "maxDocBytes": 5242880,
+    "maxConnectionsPerRoom": 25,
+    "maxConnectsPerIpPerMinute": 30,
+    "maxSharesPerIpPerDay": 50,
+    "idleExpiryDays": 30,
+    "revokeGraceHours": 24,
+    "_note": "Config defaults: the relay reads each from env and falls back to these values. Changing a value is a config change, not a contract change. idleExpiryDays and the per-IP limits are owner Question Q4 in plan.md; values here are the recommendation."
+  }
+}

@@ -1,4 +1,4 @@
-# Pluggable Renderers — Roadmap
+# Pluggable Renderers — Roadmap (RENDER-1)
 
 **Status:** PLANNED
 **Created:** 2026-05-11
@@ -77,4 +77,8 @@ Each lands as its own bundle once Feature 1 ships.
 ## Related
 - Current bundled implementation: `src/mermaidPlugin.ts`
 - Editor wiring: `src/Editor.tsx`
-- Doc-change watcher (reload-on-external-edit) already lives in `src/App.tsx:277`
+- Doc-change watcher (reload-on-external-edit) lives in `src/App.tsx:665-718` (was :277 when written)
+- Shares the "server we host" questions with
+  [SHARE-1 sharing and collaborative editing](../features/SHARE-1/plan.md). SHARE-1 step 1.3 sets a CSP baseline
+  (`"csp": null` today) that this roadmap's Phase 1a "CSP allowlist for the bundle host" item will extend. That item
+  stays open until the bundle host is decided and dynamic loading is verified.
