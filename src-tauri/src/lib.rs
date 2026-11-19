@@ -1,38 +1,17 @@
-use std::sync::Mutex;
-use tauri::{Emitter, Manager, State};
+mod documents;
 #[cfg(target_os = "macos")]
-use tauri::RunEvent;
+mod macos_quit;
+use documents::*;
+use std::path::{Path, PathBuf};
+use tauri::{RunEvent, WindowEvent};
 
-#[derive(Default)]
-struct PendingFile(Mutex<Option<String>>);
-
-fn first_file_arg(argv: &[String]) -> Option<String> {
-    argv.iter()
-        .skip(1)
-        .find(|a| !a.starts_with("--") && !a.starts_with('-'))
-        .cloned()
-}
-
-fn focus_main(app: &tauri::AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
-        let _ = win.set_focus();
-        let _ = win.unminimize();
-    }
-}
-
-#[tauri::command]
-fn take_pending_file(state: State<'_, PendingFile>) -> Option<String> {
-    state.0.lock().ok().and_then(|mut g| g.take())
-}
-
-fn deliver(app: &tauri::AppHandle, path: String) {
-    let _ = app.emit("open-file", path.clone());
-    if let Some(state) = app.try_state::<PendingFile>() {
-        if let Ok(mut g) = state.0.lock() {
-            *g = Some(path);
-        }
-    }
+fn file_args<'a>(
+    argv: impl Iterator<Item = String> + 'a,
+    cwd: &'a Path,
+) -> impl Iterator<Item = PathBuf> + 'a {
+    argv.skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .map(move |a| cwd.join(a))
 }
 
 #[cfg(target_os = "macos")]
@@ -53,7 +32,9 @@ mod ls {
 
     // Suppress unused warning for transitively-needed symbol on some toolchains.
     #[allow(dead_code)]
-    fn _force_link() -> CFTypeID { 0 }
+    fn _force_link() -> CFTypeID {
+        0
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -93,16 +74,18 @@ fn set_as_default_markdown_handler(app: tauri::AppHandle) -> Result<(), String> 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 fn set_as_default_markdown_handler(_app: tauri::AppHandle) -> Result<(), String> {
-    Err("Setting the default handler from inside the app is only supported on macOS right now.".into())
+    Err(
+        "Setting the default handler from inside the app is only supported on macOS right now."
+            .into(),
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            focus_main(app);
-            if let Some(path) = first_file_arg(&argv) {
-                deliver(app, path);
+            if let Err(e) = open_many(app, file_args(argv.into_iter(), Path::new(&_cwd))) {
+                eprintln!("Open files: {e}");
             }
         }))
         .plugin(tauri_plugin_opener::init())
@@ -116,32 +99,53 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build());
 
     let app = builder
-        .manage(PendingFile::default())
+        .manage(Documents::default())
         .invoke_handler(tauri::generate_handler![
-            take_pending_file,
+            initial_document,
+            decline_assignment,
+            open_documents,
+            new_document,
+            claim_document,
+            document_edited,
+            document_menu,
+            quit_documents,
+            unsaved_documents,
             set_as_default_markdown_handler,
         ])
         .setup(|app| {
-            let argv: Vec<String> = std::env::args().collect();
-            if let Some(path) = first_file_arg(&argv) {
-                deliver(&app.handle(), path);
+            #[cfg(target_os = "macos")]
+            macos_quit::install(app.handle().clone())?;
+            if let Err(e) = open_many(
+                app.handle(),
+                file_args(std::env::args(), &std::env::current_dir()?),
+            ) {
+                eprintln!("Open files: {e}");
             }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app, _event| {
+    app.run(|app, event| match event {
         #[cfg(target_os = "macos")]
-        if let RunEvent::Opened { urls } = _event {
-            if let Some(url) = urls.first() {
-                if let Some(path) =
-                    url.to_file_path().ok().and_then(|p| p.to_str().map(String::from))
-                {
-                    focus_main(_app);
-                    deliver(_app, path);
-                }
+        RunEvent::Opened { urls } => {
+            if let Err(e) = open_many(
+                app,
+                urls.into_iter().filter_map(|url| url.to_file_path().ok()),
+            ) {
+                eprintln!("Open files: {e}");
             }
         }
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Focused(true),
+            ..
+        } => focused(app, &label),
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Destroyed,
+            ..
+        } => removed(app, &label),
+        _ => (),
     });
 }

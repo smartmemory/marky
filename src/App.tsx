@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
-import { exists, readTextFile, watchImmediate, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -28,6 +27,7 @@ import { MarkyEditor, type EditorGetter } from "./Editor";
 import { FindReplace } from "./FindReplace";
 import { FrontmatterPanel } from "./FrontmatterPanel";
 import { splitFrontmatter, joinFrontmatter } from "./frontmatter";
+import { watchDocument } from "./watchDocument";
 import { pickStartupFile } from "./startup";
 import { classifyLink, isOpenableFile } from "./links";
 import { NavHistory } from "./navHistory";
@@ -106,7 +106,7 @@ function App() {
   const [frontmatter, setFrontmatter] = useState<string | null>(null);
   const [closeDelim, setCloseDelim] = useState<"---" | "...">("---");
   const [path, setPath] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, renderDirty] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const [recents, setRecents] = useState<string[]>(loadRecents);
   const [theme, setTheme] = useState<Theme>(loadTheme);
@@ -175,6 +175,12 @@ function App() {
       );
       if (!ok) return;
       await update.downloadAndInstall();
+      // Restarting closes every window: ask before dropping any unsaved edits.
+      const unsaved = await invoke<string[]>("unsaved_documents");
+      if (unsaved.length && !(await ask(
+        `The update is installed. Restarting discards unsaved changes in:\n\n${unsaved.join("\n")}`,
+        { title: "Unsaved changes", kind: "warning", okLabel: "Discard and Restart", cancelLabel: "Restart Later" },
+      ))) return;
       await relaunch();
     } catch (e) {
       if (manual) {
@@ -190,6 +196,7 @@ function App() {
 
   // Silent update check shortly after launch.
   useEffect(() => {
+    if (getCurrentWindow().label !== "main") return;
     const t = setTimeout(() => {
       checkForUpdates(false);
     }, 3000);
@@ -199,6 +206,15 @@ function App() {
   // Stash latest values in refs so the menu's static action callbacks see fresh state.
   const stateRef = useRef({ body, frontmatter, closeDelim, path, dirty, recents });
   stateRef.current = { body, frontmatter, closeDelim, path, dirty, recents };
+
+  const diskContents = useRef("");
+  const editedBody = useRef<(() => string) | null>(null);
+  const setDirty = useCallback((next: boolean) => {
+    if (stateRef.current.dirty === next) return;
+    stateRef.current.dirty = next;
+    renderDirty(next);
+    void invoke("document_edited", { dirty: next }).catch(console.error);
+  }, []);
 
   const getEditorRef = useRef<EditorGetter | null>(null);
   const onEditorReady = useCallback((g: EditorGetter) => {
@@ -336,11 +352,19 @@ function App() {
   }, []);
 
   const pushRecent = useCallback((p: string) => {
-    setRecents((prev) => {
-      const next = [p, ...prev.filter((x) => x !== p)].slice(0, RECENTS_MAX);
+    setRecents(() => {
+      const next = [p, ...loadRecents().filter((x) => x !== p)].slice(0, RECENTS_MAX);
       saveRecents(next);
       return next;
     });
+  }, []);
+
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === RECENTS_KEY) setRecents(loadRecents());
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
   const clearRecents = useCallback(() => {
@@ -349,11 +373,19 @@ function App() {
   }, []);
 
   const loadPath = useCallback(
-    async (target: string, restore: { scrollTop: number; fragment?: string }) => {
+    async (target: string, restore: { scrollTop: number; fragment?: string }, assigned = false) => {
       const text = await readTextFile(target);
+      if (assigned) {
+        if (stateRef.current.path || stateRef.current.dirty) {
+          await invoke("decline_assignment", { path: target });
+          return false;
+        }
+      } else if (!await invoke<boolean>("claim_document", { path: target })) return false;
+      diskContents.current = text;
       pendingRestore.current = restore;
       const split = splitFrontmatter(text);
       setFrontmatter(split.fm);
+      editedBody.current = null;
       setBody(split.body);
       setCloseDelim(split.closeDelim);
       setPath(target);
@@ -361,6 +393,7 @@ function App() {
       setEditorKey((k) => k + 1);
       pushRecent(target);
       localStorage.setItem(LAST_FILE_KEY, target);
+      return true;
     },
     [pushRecent],
   );
@@ -373,7 +406,7 @@ function App() {
     try {
       if (!(await confirmDiscard())) return;
       recordScroll();
-      await loadPath(target, { scrollTop: 0, fragment });
+      if (!await loadPath(target, { scrollTop: 0, fragment })) return;
       if (!viaLink) historyRef.current.clear();
       historyRef.current.push({ path: target, scrollTop: 0 });
       refreshHistory();
@@ -396,7 +429,7 @@ function App() {
       let target = candidate[direction]();
       while (target) {
         if (!missing.has(target.path) && await exists(target.path)) {
-          await loadPath(target.path, { scrollTop: target.scrollTop });
+          if (!await loadPath(target.path, { scrollTop: target.scrollTop })) return;
           for (const path of missing) candidate.remove(path);
           historyRef.current = candidate;
           return;
@@ -456,7 +489,11 @@ function App() {
             return;
           }
           try {
-            await navigateTo(target.path, target.fragment, true);
+            if (stateRef.current.dirty) {
+              await invoke("open_documents", { paths: [target.path] });
+            } else {
+              await navigateTo(target.path, target.fragment, true);
+            }
           } catch (err) {
             console.error(err);
           }
@@ -469,29 +506,15 @@ function App() {
     [navigateTo],
   );
 
-  const handleNew = useCallback(async () => {
-    if (navigating.current || pendingRestore.current) return;
-    if (!(await confirmDiscard())) return;
-    recordScroll();
-    historyRef.current.clear();
-    refreshHistory();
-    pendingRestore.current = null;
-    setFrontmatter(null);
-    setBody("");
-    setCloseDelim("---");
-    setPath(null);
-    setDirty(false);
-    setEditorKey((k) => k + 1);
-    localStorage.removeItem(LAST_FILE_KEY);
-  }, [confirmDiscard, recordScroll, refreshHistory]);
+  const handleNew = useCallback(() => invoke("new_document"), []);
 
   const handleOpen = useCallback(async () => {
     const selected = await open({
-      multiple: false,
+      multiple: true,
       filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
     });
-    if (typeof selected === "string") await navigateTo(selected);
-  }, [navigateTo]);
+    if (selected?.length) await invoke("open_documents", { paths: selected });
+  }, []);
 
   const handleOpenRecent = useCallback(
     async (p: string) => {
@@ -505,12 +528,12 @@ function App() {
           });
           return;
         }
-        await navigateTo(p);
+        await invoke("open_documents", { paths: [p] });
       } catch (err) {
         console.error(err);
       }
     },
-    [navigateTo],
+    [],
   );
 
   const recordSavedPath = useCallback((path: string) => {
@@ -520,59 +543,49 @@ function App() {
     refreshHistory();
   }, [refreshHistory]);
 
-  const handleSave = useCallback(async () => {
+  const saveDocument = useCallback(async (saveAs: boolean) => {
     let target = stateRef.current.path;
-    if (!target) {
-      const chosen = await save({
+    if (!target || saveAs) {
+      target = await save({
         filters: [{ name: "Markdown", extensions: ["md"] }],
+        defaultPath: target ?? undefined,
       });
-      if (!chosen) return;
-      target = chosen;
     }
-    await writeTextFile(
-      target,
-      joinFrontmatter(
-        stateRef.current.frontmatter,
-        stateRef.current.body,
-        stateRef.current.closeDelim,
-      ),
-    );
-    recordSavedPath(target);
-    setPath(target);
-    setDirty(false);
-    pushRecent(target);
-    localStorage.setItem(LAST_FILE_KEY, target);
+    if (!target) return;
+    const snapshot = editedBody.current;
+    const { frontmatter, body, closeDelim } = stateRef.current;
+    try {
+      const contents = joinFrontmatter(frontmatter, snapshot ? snapshot() : body, closeDelim);
+      if (!await invoke<boolean>("claim_document", {
+        path: target, contents,
+      })) {
+        await message("That file is open in another Marky window. Choose a different name to save this document.", { title: "File already open" });
+        return;
+      }
+      diskContents.current = contents;
+      recordSavedPath(target);
+      setPath(target);
+      if (snapshot === editedBody.current && frontmatter === stateRef.current.frontmatter) setDirty(false);
+      pushRecent(target);
+      localStorage.setItem(LAST_FILE_KEY, target);
+    } catch (err) {
+      await message(String(err), { title: "Could not save document", kind: "error" });
+    }
   }, [pushRecent, recordSavedPath]);
 
-  const handleSaveAs = useCallback(async () => {
-    const chosen = await save({
-      filters: [{ name: "Markdown", extensions: ["md"] }],
-      defaultPath: stateRef.current.path ?? undefined,
-    });
-    if (!chosen) return;
-    await writeTextFile(
-      chosen,
-      joinFrontmatter(
-        stateRef.current.frontmatter,
-        stateRef.current.body,
-        stateRef.current.closeDelim,
-      ),
-    );
-    recordSavedPath(chosen);
-    setPath(chosen);
-    setDirty(false);
-    pushRecent(chosen);
-    localStorage.setItem(LAST_FILE_KEY, chosen);
-  }, [pushRecent, recordSavedPath]);
+  const handleSave = useCallback(() => saveDocument(false), [saveDocument]);
+  const handleSaveAs = useCallback(() => saveDocument(true), [saveDocument]);
 
   const handleRevert = useCallback(async () => {
     const p = stateRef.current.path;
-    if (!p) return;
+    if (!p || !stateRef.current.dirty) return;
     if (!(await confirmDiscard())) return;
     try {
       const text = await readTextFile(p);
+      diskContents.current = text;
       const split = splitFrontmatter(text);
       setFrontmatter(split.fm);
+      editedBody.current = null;
       setBody(split.body);
       setCloseDelim(split.closeDelim);
       setDirty(false);
@@ -582,13 +595,23 @@ function App() {
     }
   }, [confirmDiscard]);
 
-  const handleClose = useCallback(async () => {
-    if (!(await confirmDiscard())) return;
-    recordScroll();
-    historyRef.current.clear();
-    refreshHistory();
-    await getCurrentWindow().close();
-  }, [confirmDiscard, recordScroll, refreshHistory]);
+  const handleClose = useCallback(() => getCurrentWindow().close(), []);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let asking = false;
+    const unlisten = win.onCloseRequested(async (event) => {
+      event.preventDefault();
+      if (asking) return;
+      asking = true;
+      try {
+        if (await confirmDiscard()) await win.destroy();
+      } finally {
+        asking = false;
+      }
+    });
+    return () => { void unlisten.then(fn => fn()); };
+  }, [confirmDiscard]);
 
   const handleSetAsDefault = useCallback(async () => {
     try {
@@ -662,106 +685,61 @@ function App() {
     [cmd],
   );
 
-  // External-change watcher: reload prompt if the open file changes on disk
   useEffect(() => {
     if (!path) return;
-    let unwatch: (() => void) | null = null;
-    let lastSeen = "";
-    let cancelled = false;
-    (async () => {
-      try {
-        lastSeen = await readTextFile(path);
-        if (cancelled) return;
-        unwatch = await watchImmediate(path, async () => {
-            try {
-              const fresh = await readTextFile(path);
-              if (fresh === lastSeen) return;
-              if (
-                fresh ===
-                joinFrontmatter(
-                  stateRef.current.frontmatter,
-                  stateRef.current.body,
-                  stateRef.current.closeDelim,
-                )
-              ) {
-                lastSeen = fresh;
-                return;
-              }
-              const reload = await ask("File changed on disk. Reload?", {
-                title: "External change",
-                kind: "warning",
-                okLabel: "Reload",
-                cancelLabel: "Keep mine",
-              });
-              if (reload) {
-                lastSeen = fresh;
-                const split = splitFrontmatter(fresh);
-                setFrontmatter(split.fm);
-                setBody(split.body);
-                setCloseDelim(split.closeDelim);
-                setDirty(false);
-                setEditorKey((k) => k + 1);
-              }
-            } catch {
-              // file may have been deleted; ignore
-            }
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (unwatch) unwatch();
-    };
-  }, [path]);
-
-  // Initial load: OS files win; otherwise optionally reopen the last document.
-  // Defer last-file filesystem access until after the initial render so macOS
-  // TCC prompts do not gate the UI's startup path.
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    (async () => {
-      // The command consumes the path; share it across StrictMode effect replays.
-      pendingFile.current ??= invoke<string | null>("take_pending_file").catch(() => null);
-      const pending = await pendingFile.current;
-      if (cancelled) return;
-      const selected = pickStartupFile(pending, loadReopenLast(), localStorage.getItem(LAST_FILE_KEY));
-      if (!selected) return;
-      if (selected.source === "pending") {
-        await navigateTo(selected.path);
+    return watchDocument(path, diskContents.current, async (text, active) => {
+      const { frontmatter, body, closeDelim } = stateRef.current;
+      if (text === joinFrontmatter(frontmatter, editedBody.current?.() ?? body, closeDelim)) return;
+      const reload = await ask(`${basename(path)} changed on disk. Reload?`, {
+        title: "External change", kind: "warning",
+        okLabel: "Reload", cancelLabel: "Keep mine",
+      });
+      if (!active()) return;
+      diskContents.current = text;
+      if (!reload) {
+        setDirty(true);
         return;
       }
-      timer = setTimeout(() => {
-        (async () => {
-          if (cancelled) return;
-          const present = await exists(selected.path);
-          if (cancelled) return;
-          if (present) {
-            await navigateTo(selected.path);
-          } else {
-            localStorage.removeItem(LAST_FILE_KEY);
-          }
-        })().catch(console.error);
-      }, 0);
-    })().catch(console.error);
+      const split = splitFrontmatter(text);
+      editedBody.current = null;
+      setBody(split.body);
+      setFrontmatter(split.fm);
+      setCloseDelim(split.closeDelim);
+      setDirty(false);
+      setEditorKey(k => k + 1);
+    });
+  }, [path, setDirty]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const win = getCurrentWindow();
+    const accept = async (target: string) => {
+      if (cancelled) return;
+      try {
+        if (await loadPath(target, { scrollTop: 0 }, true)) {
+          historyRef.current.push({ path: target, scrollTop: 0 });
+          refreshHistory();
+        }
+      } catch (err) {
+        await invoke("claim_document", { path: null });
+        await message(String(err), { title: "Could not open document", kind: "error" });
+      }
+    };
+    const listener = win.listen<string>("assigned-document", e => accept(e.payload));
+    const timer = setTimeout(async () => {
+      await listener;
+      if (cancelled) return;
+      const last = pickStartupFile(null, loadReopenLast(), localStorage.getItem(LAST_FILE_KEY));
+      pendingFile.current ??= invoke<string | null>("initial_document", { last: last?.path ?? null });
+      const target = await pendingFile.current;
+      if (target) await accept(target);
+    }, win.label === "main" ? 100 : 0);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      void listener.then(fn => fn());
     };
-  }, [navigateTo]);
-
-  // OS open-file events while running
-  useEffect(() => {
-    const unlisten = listen<string>("open-file", async (e) => {
-      if (!e.payload) return;
-      await navigateTo(e.payload);
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [navigateTo]);
+  }, [loadPath, refreshHistory]);
 
   // Drag-drop file onto the window
   useEffect(() => {
@@ -770,12 +748,12 @@ function App() {
       if (event.payload.type !== "drop") return;
       const paths = event.payload.paths;
       if (!paths.length) return;
-      await navigateTo(paths[0]);
+      await invoke("open_documents", { paths });
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [navigateTo]);
+  }, []);
 
   // Keep window title + edited indicator in sync
   useEffect(() => {
@@ -791,11 +769,12 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const menuId = (name: string) => getCurrentWindow().label + "-" + name;
       const appVersion = await getVersion();
       const recentItems = await Promise.all(
         recents.map((p, i) =>
           MenuItem.new({
-            id: `recent-${i}`,
+            id: menuId(`recent-${i}`),
             text: basename(p),
             action: () => handleOpenRecent(p),
           }),
@@ -806,14 +785,14 @@ function App() {
         recentTail.push(await PredefinedMenuItem.new({ item: "Separator" }));
         recentTail.push(
           await MenuItem.new({
-            id: "clear-recents",
+            id: menuId("clear-recents"),
             text: "Clear Menu",
             action: () => clearRecents(),
           }),
         );
       } else {
         recentTail.push(
-          await MenuItem.new({ id: "no-recents", text: "(none)", enabled: false }),
+          await MenuItem.new({ id: menuId("no-recents"), text: "(none)", enabled: false }),
         );
       }
 
@@ -821,13 +800,13 @@ function App() {
         text: "File",
         items: [
           await MenuItem.new({
-            id: "new",
+            id: menuId("new"),
             text: "New",
             accelerator: "CmdOrCtrl+N",
             action: () => handleNew(),
           }),
           await MenuItem.new({
-            id: "open",
+            id: menuId("open"),
             text: "Open…",
             accelerator: "CmdOrCtrl+O",
             action: () => handleOpen(),
@@ -838,46 +817,47 @@ function App() {
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "close",
+            id: menuId("close"),
             text: "Close",
             accelerator: "CmdOrCtrl+W",
             action: () => handleClose(),
           }),
           await MenuItem.new({
-            id: "save",
+            id: menuId("save"),
             text: "Save",
             accelerator: "CmdOrCtrl+S",
             action: () => handleSave(),
           }),
           await MenuItem.new({
-            id: "saveAs",
+            id: menuId("saveAs"),
             text: "Save As…",
             accelerator: "CmdOrCtrl+Shift+S",
             action: () => handleSaveAs(),
           }),
           await MenuItem.new({
-            id: "revert",
+            id: menuId("revert"),
             text: "Revert to Saved",
             accelerator: "CmdOrCtrl+Shift+R",
+            enabled: !!path && dirty,
             action: () => handleRevert(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "insert-frontmatter",
+            id: menuId("insert-frontmatter"),
             text: "Insert Frontmatter",
             enabled: !hasFrontmatter,
             action: () => handleInsertFrontmatter(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "showInFinder",
+            id: menuId("showInFinder"),
             text: "Show in Finder",
             accelerator: "CmdOrCtrl+Ctrl+O",
             action: () => handleShowInFinder(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "print",
+            id: menuId("print"),
             text: "Print…",
             accelerator: "CmdOrCtrl+P",
             action: () => handlePrint(),
@@ -897,13 +877,13 @@ function App() {
           await PredefinedMenuItem.new({ item: "SelectAll" }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "find",
+            id: menuId("find"),
             text: "Find…",
             accelerator: "CmdOrCtrl+F",
             action: () => handleFind(),
           }),
           await MenuItem.new({
-            id: "replace",
+            id: menuId("replace"),
             text: "Find and Replace…",
             accelerator: "CmdOrCtrl+Alt+F",
             action: () => handleReplace(),
@@ -916,7 +896,7 @@ function App() {
         items: await Promise.all(
           [1, 2, 3, 4, 5, 6].map((lvl) =>
             MenuItem.new({
-              id: `heading-${lvl}`,
+              id: menuId(`heading-${lvl}`),
               text: `Heading ${lvl}`,
               accelerator: `CmdOrCtrl+${lvl}`,
               action: () => fmtHeading(lvl),
@@ -929,25 +909,25 @@ function App() {
         text: "Format",
         items: [
           await MenuItem.new({
-            id: "fmt-bold",
+            id: menuId("fmt-bold"),
             text: "Bold",
             accelerator: "CmdOrCtrl+B",
             action: fmtBold,
           }),
           await MenuItem.new({
-            id: "fmt-italic",
+            id: menuId("fmt-italic"),
             text: "Italic",
             accelerator: "CmdOrCtrl+I",
             action: fmtItalic,
           }),
           await MenuItem.new({
-            id: "fmt-code",
+            id: menuId("fmt-code"),
             text: "Inline Code",
             accelerator: "CmdOrCtrl+`",
             action: fmtCode,
           }),
           await MenuItem.new({
-            id: "fmt-link",
+            id: menuId("fmt-link"),
             text: "Link",
             accelerator: "CmdOrCtrl+K",
             action: fmtLink,
@@ -955,31 +935,31 @@ function App() {
           await PredefinedMenuItem.new({ item: "Separator" }),
           headingSubmenu,
           await MenuItem.new({
-            id: "fmt-bullet",
+            id: menuId("fmt-bullet"),
             text: "Bulleted List",
             accelerator: "CmdOrCtrl+Shift+8",
             action: fmtBulletList,
           }),
           await MenuItem.new({
-            id: "fmt-ordered",
+            id: menuId("fmt-ordered"),
             text: "Numbered List",
             accelerator: "CmdOrCtrl+Shift+7",
             action: fmtOrderedList,
           }),
           await MenuItem.new({
-            id: "fmt-quote",
+            id: menuId("fmt-quote"),
             text: "Quote",
             accelerator: "CmdOrCtrl+Shift+Q",
             action: fmtBlockquote,
           }),
           await MenuItem.new({
-            id: "fmt-codeblock",
+            id: menuId("fmt-codeblock"),
             text: "Code Block",
             accelerator: "CmdOrCtrl+Alt+C",
             action: fmtCodeBlock,
           }),
           await MenuItem.new({
-            id: "fmt-hr",
+            id: menuId("fmt-hr"),
             text: "Horizontal Rule",
             action: fmtHr,
           }),
@@ -990,19 +970,19 @@ function App() {
         text: "Theme",
         items: [
           await CheckMenuItem.new({
-            id: "theme-system",
+            id: menuId("theme-system"),
             text: "System",
             checked: theme === "system",
             action: () => setTheme("system"),
           }),
           await CheckMenuItem.new({
-            id: "theme-light",
+            id: menuId("theme-light"),
             text: "Light",
             checked: theme === "light",
             action: () => setTheme("light"),
           }),
           await CheckMenuItem.new({
-            id: "theme-dark",
+            id: menuId("theme-dark"),
             text: "Dark",
             checked: theme === "dark",
             action: () => setTheme("dark"),
@@ -1016,19 +996,19 @@ function App() {
           themeSubmenu,
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "zoom-in",
+            id: menuId("zoom-in"),
             text: "Zoom In",
             accelerator: "CmdOrCtrl+Equal",
             action: () => zoomIn(),
           }),
           await MenuItem.new({
-            id: "zoom-out",
+            id: menuId("zoom-out"),
             text: "Zoom Out",
             accelerator: "CmdOrCtrl+Minus",
             action: () => zoomOut(),
           }),
           await MenuItem.new({
-            id: "zoom-reset",
+            id: menuId("zoom-reset"),
             text: "Actual Size",
             accelerator: "CmdOrCtrl+0",
             action: () => zoomReset(),
@@ -1042,11 +1022,11 @@ function App() {
         text: "Go",
         items: [
           await MenuItem.new({
-            id: "nav-back", text: "Back", accelerator: "CmdOrCtrl+[",
+            id: menuId("nav-back"), text: "Back", accelerator: "CmdOrCtrl+[",
             enabled: historyFlags.canBack, action: () => handleBack(),
           }),
           await MenuItem.new({
-            id: "nav-forward", text: "Forward", accelerator: "CmdOrCtrl+]",
+            id: menuId("nav-forward"), text: "Forward", accelerator: "CmdOrCtrl+]",
             enabled: historyFlags.canForward, action: () => handleForward(),
           }),
         ],
@@ -1056,18 +1036,18 @@ function App() {
         text: "Help",
         items: [
           await MenuItem.new({
-            id: "help-report-bug",
+            id: menuId("help-report-bug"),
             text: "Report a Bug…",
             action: () => handleReportBug(),
           }),
           await MenuItem.new({
-            id: "help-suggest-feature",
+            id: menuId("help-suggest-feature"),
             text: "Suggest a Feature…",
             action: () => handleSuggestFeature(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "help-view-repo",
+            id: menuId("help-view-repo"),
             text: "View on GitHub",
             action: () => handleViewRepo(),
           }),
@@ -1093,19 +1073,19 @@ function App() {
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "check-updates",
+            id: menuId("check-updates"),
             text: "Check for Updates…",
             action: () => checkForUpdates(true),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await MenuItem.new({
-            id: "set-default",
+            id: menuId("set-default"),
             text: "Set as Default for Markdown Files",
             action: () => handleSetAsDefault(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),
           await CheckMenuItem.new({
-            id: "reopen-last",
+            id: menuId("reopen-last"),
             text: "Reopen Last Document on Launch",
             checked: reopenLast,
             action: () => setReopenLast((value) => !value),
@@ -1117,7 +1097,7 @@ function App() {
           await PredefinedMenuItem.new({ item: "HideOthers" }),
           await PredefinedMenuItem.new({ item: "ShowAll" }),
           await PredefinedMenuItem.new({ item: "Separator" }),
-          await PredefinedMenuItem.new({ item: "Quit" }),
+          await MenuItem.new({ id: menuId("quit"), text: "Quit Marky", accelerator: "CmdOrCtrl+Q", action: () => invoke("quit_documents") }),
         ],
       });
 
@@ -1126,12 +1106,14 @@ function App() {
       });
 
       if (cancelled) return;
-      await menu.setAsAppMenu();
+      await invoke("document_menu", { rid: menu.rid });
     })().catch(console.error);
     return () => {
       cancelled = true;
     };
   }, [
+    dirty,
+    path,
     historyFlags.canBack,
     historyFlags.canForward,
     handleBack,
@@ -1173,8 +1155,8 @@ function App() {
     handlePrint,
   ]);
 
-  const handleChange = useCallback((md: string) => {
-    setBody(md);
+  const handleChange = useCallback((readMarkdown: () => string) => {
+    editedBody.current = readMarkdown;
     setDirty(true);
   }, []);
 
