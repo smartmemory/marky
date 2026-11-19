@@ -40,14 +40,15 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 
 ## What works today
 
-- Double-click a `.md` file → it opens in Marky
+- Open one or more files from Finder or the Open dialog. Each document opens in its own window. Opening a file again focuses its window.
 - WYSIWYG editing (CommonMark + GFM): bold, italic, headings, lists, quotes, code, links, tables
 - File menu: New, Open, Save, Save As, Revert, Recent Files, Show in Finder
 - Reopen the last document on launch by default — toggle via Marky → Reopen Last Document on Launch
 - Keyboard shortcuts (⌘N / ⌘O / ⌘S / ⌘⇧S, ⌘B / ⌘I / ⌘K, ⌘1–6 for headings, …)
+- Revert to Saved (⌘⇧R on macOS, Ctrl+Shift+R on Windows/Linux) asks before discarding edits in the focused document.
 - Dirty-state tracking — warns before closing or discarding
 - File watcher — prompts to reload if the file changes on disk
-- Drag a `.md` file onto the window to open it
+- Drag Markdown files onto a Marky window to open them
 - Cmd+click (Ctrl+click on Windows/Linux) a link to follow it: opens external
   links in your browser, jumps to `#heading` anchors, opens relative or
   absolute local file links in Marky (including `other.md#section` heading jumps)

@@ -1,9 +1,10 @@
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from "@milkdown/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx } from "@milkdown/core";
 import { commonmark } from "@milkdown/preset-commonmark";
 import { gfm } from "@milkdown/preset-gfm";
 import { history } from "@milkdown/plugin-history";
 import { clipboard } from "@milkdown/plugin-clipboard";
-import { listener, listenerCtx } from "@milkdown/plugin-listener";
+import { $prose } from "@milkdown/utils";
+import { Plugin } from "@milkdown/prose/state";
 import { nord } from "@milkdown/theme-nord";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { useEffect, useRef } from "react";
@@ -17,7 +18,7 @@ export type EditorGetter = () => Editor | undefined;
 
 type Props = {
   initial: string;
-  onChange: (markdown: string) => void;
+  onChange: (readMarkdown: () => string) => void;
   onReady?: (getEditor: EditorGetter) => void;
   /** Cmd/Ctrl+click on a link that isn't an in-doc anchor (App owns the current file path). */
   onFollowLink?: (href: string) => void;
@@ -35,15 +36,23 @@ function MilkdownEditor({ initial, onChange, onReady, onFollowLink }: Props) {
       .config((ctx) => {
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, initial);
-        ctx.get(listenerCtx).markdownUpdated((_, md) => {
-          onChangeRef.current(md);
-        });
       })
       .use(commonmark)
       .use(gfm)
       .use(history)
       .use(clipboard)
-      .use(listener)
+      .use($prose(ctx => new Plugin({
+        view: () => ({
+          update(view, previous) {
+            const doc = view.state.doc;
+            if (doc !== previous.doc) {
+              // Publish edits before the next native Close/Save/Quit command.
+              // Serialize the immutable snapshot only when its text is needed.
+              onChangeRef.current(() => ctx.get(serializerCtx)(doc));
+            }
+          },
+        }),
+      })))
       .use(mermaidPlugin)
       .use(searchPlugin)
       .use(createLinkFollowPlugin((href) => onFollowLinkRef.current?.(href))),
