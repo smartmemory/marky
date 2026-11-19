@@ -1,6 +1,7 @@
 mod documents;
 #[cfg(target_os = "macos")]
 mod macos_quit;
+mod save;
 use documents::*;
 use std::path::{Path, PathBuf};
 use tauri::{RunEvent, WindowEvent};

@@ -209,6 +209,7 @@ function App() {
 
   const diskContents = useRef("");
   const editedBody = useRef<(() => string) | null>(null);
+  const saving = useRef(false);
   const setDirty = useCallback((next: boolean) => {
     if (stateRef.current.dirty === next) return;
     stateRef.current.dirty = next;
@@ -544,34 +545,61 @@ function App() {
   }, [refreshHistory]);
 
   const saveDocument = useCallback(async (saveAs: boolean) => {
-    let target = stateRef.current.path;
-    if (!target || saveAs) {
-      target = await save({
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-        defaultPath: target ?? undefined,
-      });
-    }
-    if (!target) return;
-    const snapshot = editedBody.current;
-    const { frontmatter, body, closeDelim } = stateRef.current;
+    if (saving.current) return;
+    saving.current = true;
     try {
-      const contents = joinFrontmatter(frontmatter, snapshot ? snapshot() : body, closeDelim);
-      if (!await invoke<boolean>("claim_document", {
-        path: target, contents,
-      })) {
-        await message("That file is open in another Marky window. Choose a different name to save this document.", { title: "File already open" });
+      const originalPath = stateRef.current.path;
+      const pickPath = (defaultPath?: string) => save({
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+        defaultPath,
+      });
+      let target = originalPath && !saveAs ? originalPath : await pickPath(originalPath ?? undefined);
+      let overwrite = false;
+      while (target && stateRef.current.path === originalPath) {
+        const snapshot = editedBody.current;
+        const { frontmatter, body, closeDelim } = stateRef.current;
+        const contents = joinFrontmatter(frontmatter, snapshot ? snapshot() : body, closeDelim);
+        let claimed: boolean;
+        try {
+          claimed = await invoke<boolean>("claim_document", {
+            path: target,
+            contents,
+            expectedDiskContents: target === originalPath && !overwrite ? diskContents.current : null,
+          });
+        } catch (err) {
+          if (err !== "document_save_conflict") throw err;
+          const choice = await message(`${basename(target)} has changed on disk. Overwrite the file or save your changes under another name?`, {
+            title: "File changed on disk",
+            kind: "warning",
+            buttons: { yes: "Overwrite", no: "Save As", cancel: "Cancel" },
+          });
+          if (choice === "Overwrite") {
+            overwrite = true;
+          } else if (choice === "Save As") {
+            target = await pickPath(target);
+          } else {
+            return;
+          }
+          continue;
+        }
+        if (!claimed) {
+          await message("That file is open in another Marky window. Choose a different name to save this document.", { title: "File already open" });
+          return;
+        }
+        diskContents.current = contents;
+        recordSavedPath(target);
+        setPath(target);
+        if (snapshot === editedBody.current && frontmatter === stateRef.current.frontmatter) setDirty(false);
+        pushRecent(target);
+        localStorage.setItem(LAST_FILE_KEY, target);
         return;
       }
-      diskContents.current = contents;
-      recordSavedPath(target);
-      setPath(target);
-      if (snapshot === editedBody.current && frontmatter === stateRef.current.frontmatter) setDirty(false);
-      pushRecent(target);
-      localStorage.setItem(LAST_FILE_KEY, target);
     } catch (err) {
       await message(String(err), { title: "Could not save document", kind: "error" });
+    } finally {
+      saving.current = false;
     }
-  }, [pushRecent, recordSavedPath]);
+  }, [pushRecent, recordSavedPath, setDirty]);
 
   const handleSave = useCallback(() => saveDocument(false), [saveDocument]);
   const handleSaveAs = useCallback(() => saveDocument(true), [saveDocument]);

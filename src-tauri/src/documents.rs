@@ -6,6 +6,8 @@ use std::{
 use tauri::{menu::Menu, AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
+use crate::save::write_document;
+
 #[derive(Default)]
 struct Document {
     path: Option<PathBuf>,
@@ -181,6 +183,7 @@ pub fn claim_document(
     window: WebviewWindow,
     path: Option<PathBuf>,
     contents: Option<String>,
+    expected_disk_contents: Option<String>,
 ) -> Result<bool, String> {
     let path = path.as_deref().map(identity).transpose()?;
     let state = window.state::<Documents>();
@@ -196,7 +199,7 @@ pub fn claim_document(
         return Ok(false);
     }
     if let (Some(p), Some(text)) = (&path, contents) {
-        std::fs::write(p, text).map_err(|e| e.to_string())?;
+        write_document(p, &text, expected_disk_contents.as_deref()).map_err(|e| e.to_string())?;
     }
     registry
         .windows
@@ -323,6 +326,89 @@ pub fn quit_documents(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    mod save_tests {
+        use crate::save::{atomic_write_with, disk_conflicts};
+        use std::{
+            fs,
+            io::{self, Read, Write},
+            os::unix::fs::PermissionsExt,
+            path::PathBuf,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+
+        struct TestDirectory(PathBuf);
+
+        impl TestDirectory {
+            fn new() -> Self {
+                static NEXT: AtomicU64 = AtomicU64::new(0);
+                let path = std::env::temp_dir().join(format!(
+                    "test_marky_save_{}_{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, Ordering::Relaxed)
+                ));
+                fs::create_dir(&path).unwrap();
+                Self(path)
+            }
+        }
+
+        impl Drop for TestDirectory {
+            fn drop(&mut self) {
+                fs::remove_dir_all(&self.0).unwrap();
+            }
+        }
+
+        #[test]
+        fn partial_write_leaves_original_bytes_and_removes_temporary_file() {
+            let directory = TestDirectory::new();
+            let path = directory.0.join("document.md");
+            fs::write(&path, b"original").unwrap();
+
+            let error = atomic_write_with(
+                &path,
+                |file| {
+                    file.write_all(b"partial")?;
+                    Err(io::Error::other("injected error after writing bytes"))
+                },
+                None,
+            )
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "injected error after writing bytes");
+            assert_eq!(fs::read(&path).unwrap(), b"original");
+            assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 1);
+        }
+
+        #[test]
+        fn successful_write_replaces_file_and_preserves_mode_without_leaving_temp_file() {
+            let directory = TestDirectory::new();
+            let path = directory.0.join("document.md");
+            fs::write(&path, b"original").unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+            let mut original = fs::File::open(&path).unwrap();
+
+            atomic_write_with(&path, |file| file.write_all(b"replacement"), None).unwrap();
+
+            assert_eq!(fs::read(&path).unwrap(), b"replacement");
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+                0o640
+            );
+            assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 1);
+            let mut original_bytes = Vec::new();
+            original.read_to_end(&mut original_bytes).unwrap();
+            assert_eq!(original_bytes, b"original");
+        }
+
+        #[test]
+        fn only_different_existing_disk_bytes_conflict() {
+            assert!(!disk_conflicts(b"loaded", Some(b"loaded")));
+            assert!(!disk_conflicts(b"loaded", None));
+            assert!(disk_conflicts(b"loaded", Some(b"newer")));
+        }
+    }
+
 
     #[test]
     fn quit_consent_covers_only_the_dirty_documents_listed() {
