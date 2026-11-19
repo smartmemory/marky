@@ -175,6 +175,12 @@ function App() {
       );
       if (!ok) return;
       await update.downloadAndInstall();
+      // Restarting closes every window: ask before dropping any unsaved edits.
+      const unsaved = await invoke<string[]>("unsaved_documents");
+      if (unsaved.length && !(await ask(
+        `The update is installed. Restarting discards unsaved changes in:\n\n${unsaved.join("\n")}`,
+        { title: "Unsaved changes", kind: "warning", okLabel: "Discard and Restart", cancelLabel: "Restart Later" },
+      ))) return;
       await relaunch();
     } catch (e) {
       if (manual) {

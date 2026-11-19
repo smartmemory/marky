@@ -268,6 +268,13 @@ pub fn removed(app: &AppHandle, label: &str) {
 }
 
 #[tauri::command]
+pub fn unsaved_documents(app: AppHandle) -> Vec<String> {
+    let state = app.state::<Documents>();
+    let registry = state.0.lock().unwrap();
+    registry.dirty_documents().into_iter().map(|(_, name)| name).collect()
+}
+
+#[tauri::command]
 pub fn quit_documents(app: AppHandle) {
     let state = app.state::<Documents>();
     let mut registry = state.0.lock().unwrap();

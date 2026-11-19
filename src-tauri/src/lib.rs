@@ -109,6 +109,7 @@ pub fn run() {
             document_edited,
             document_menu,
             quit_documents,
+            unsaved_documents,
             set_as_default_markdown_handler,
         ])
         .setup(|app| {
