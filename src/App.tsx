@@ -858,6 +858,7 @@ function App() {
           await MenuItem.new({
             id: "revert",
             text: "Revert to Saved",
+            accelerator: "CmdOrCtrl+Shift+R",
             action: () => handleRevert(),
           }),
           await PredefinedMenuItem.new({ item: "Separator" }),

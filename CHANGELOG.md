@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Revert to Saved has a shortcut: Cmd/Ctrl+Shift+R.
+
 ### Planned
 - SHARE-1 online sharing and collaborative editing: design, plan and contract in `docs/features/SHARE-1/` (PLANNED, nothing built). Relay is self-hosted; v1 states that the server operator can read shared documents. New `ROADMAP.md` lists RENDER-1 and SHARE-1.
 
