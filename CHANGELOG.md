@@ -6,6 +6,9 @@
 - Save and Save As replace files atomically, preserving the original file if a write fails and keeping its permission bits on success.
 - Saving a document that changed on disk offers Overwrite, Save As, or Cancel.
 
+### Changed
+- A file that changes on disk reloads without asking when the open document has no unsaved edits. The reload prompt appears only when there are edits to lose.
+
 ### Planned
 - SHARE-1 online sharing and collaborative editing: design, plan and contract in `docs/features/SHARE-1/` (PLANNED, nothing built). Relay is self-hosted; v1 states that the server operator can read shared documents. New `ROADMAP.md` lists RENDER-1 and SHARE-1.
 

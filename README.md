@@ -47,7 +47,7 @@ the optional CLI shim (`sudo sh scripts/install-cli.sh` on macOS).
 - Keyboard shortcuts (⌘N / ⌘O / ⌘S / ⌘⇧S, ⌘B / ⌘I / ⌘K, ⌘1–6 for headings, …)
 - Revert to Saved (⌘⇧R on macOS, Ctrl+Shift+R on Windows/Linux) asks before discarding edits in the focused document.
 - Dirty-state tracking — warns before closing or discarding
-- File watcher — prompts to reload if the file changes on disk
+- File watcher: reloads the file when it changes on disk, and asks first only if you have unsaved edits
 - Drag Markdown files onto a Marky window to open them
 - Cmd+click (Ctrl+click on Windows/Linux) a link to follow it: opens external
   links in your browser, jumps to `#heading` anchors, opens relative or
@@ -116,7 +116,7 @@ the previously active GitHub account after publishing.
 - [x] Keyboard shortcuts (⌘N/O/S/⇧S, ⌘B/I/K, ⌘1–6, …)
 - [x] Recent files menu
 - [x] Dirty-state warning on close / discard
-- [x] File watcher — reload prompt on external edits
+- [x] File watcher: auto reload on external edits, prompt only with unsaved edits
 - [x] Drag-and-drop to open
 - [x] Light / dark / system theme
 - [x] Help menu — bug report and feature suggestion

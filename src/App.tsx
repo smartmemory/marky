@@ -718,7 +718,8 @@ function App() {
     return watchDocument(path, diskContents.current, async (text, active) => {
       const { frontmatter, body, closeDelim } = stateRef.current;
       if (text === joinFrontmatter(frontmatter, editedBody.current?.() ?? body, closeDelim)) return;
-      const reload = await ask(`${basename(path)} changed on disk. Reload?`, {
+      // No unsaved edits means nothing to lose: reload without asking.
+      const reload = !stateRef.current.dirty || await ask(`${basename(path)} changed on disk. Reload?`, {
         title: "External change", kind: "warning",
         okLabel: "Reload", cancelLabel: "Keep mine",
       });
